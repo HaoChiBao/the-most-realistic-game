@@ -83,6 +83,17 @@ the crowded hold of a ferry, pressed between strangers, as the engines suddenly
 cut to silence and the lights flicker once."
 State what is happening simply. Avoid stacked adjectives, ornate metaphors, and
 purple prose.
+Cut sensory and atmospheric detail. Do NOT describe smells, temperature,
+textures, the feel of the air, ambient sounds, or the mood of a place unless the
+player specifically asks about them or they are a direct, important consequence
+of the action. Report only the plain facts the player needs to see and act. For
+example, say "The door opens into a dark hallway." NOT "The door at the top
+opens into a dark hallway that smells like old carpet and cold air." Say "There
+is a viewing room ahead and an office on your left." NOT a description of the
+carpet, the cold, or the quiet.
+When the player looks around, name at most one or two concrete, useful things
+(an exit, an object, a person), stated plainly with no sensory dressing. Do not
+inventory the whole room. Let the player pull out more by asking or moving.
 Use plain, functional verbs. Do NOT use exaggerated verbs like "crackling,"
 "howling," "screaming," "erupting," "stabbing." Say "the radio has started a
 countdown, ten minutes until the storm hits," not "the radio crackling with a
@@ -176,4 +187,4 @@ export const OPENING_INSTRUCTION =
 
 // Bumped whenever the prompt/engine behavior changes. Stored alongside shared
 // seeds so we know which engine produced a given world.
-export const ENGINE_VERSION = "v3.1";
+export const ENGINE_VERSION = "v3.2";

@@ -51,7 +51,7 @@ function composeRaw(opening: string, world: string): string {
 }
 
 const BOOT_LINES = [
-  "REALITY ENGINE v3.1  //  DEEPSEEK CORE",
+  "REALITY ENGINE v3.2  //  DEEPSEEK CORE",
   "allocating world seed .......... OK",
   "spinning up hidden rules ....... OK",
   "seeding autonomous actors ...... OK",
@@ -62,7 +62,7 @@ const BOOT_LINES = [
 ];
 
 const BOOT_LINES_SEED = [
-  "REALITY ENGINE v3.1  //  DEEPSEEK CORE",
+  "REALITY ENGINE v3.2  //  DEEPSEEK CORE",
   "resolving shared seed .......... OK",
   "restoring hidden world ......... OK",
   "waking autonomous actors ....... OK",
@@ -312,17 +312,24 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     void boot();
   }, [boot]);
 
+  // Focus the field right away so the player can type while the world loads.
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
   const submit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
       const value = input.trim().slice(0, MAX_INPUT);
-      if (!value || busy || ended) return;
+      // The field is always typeable, but sending is locked while the world is
+      // still loading or a response is streaming. Preserve what was typed.
+      if (!value || busy || ended || !booted) return;
       setInput("");
       addEntry("player", value);
       historyRef.current.push({ role: "user", content: value });
       await streamTurn();
     },
-    [input, busy, ended, addEntry, streamTurn]
+    [input, busy, ended, booted, addEntry, streamTurn]
   );
 
   // Save the current world so others can play it, then copy a share link.
@@ -377,6 +384,13 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
 
   const remaining = MAX_INPUT - input.length;
   const showCursor = busy || !booted;
+  // Sending is locked while the world loads or a reply streams; typing is not.
+  const sendLocked = busy || !booted;
+  const placeholderText = !booted
+    ? "loading the world... you can start typing"
+    : busy
+    ? "type your next move... it sends when the world settles"
+    : "what do you do?";
 
   return (
     <div className="crt" onClick={() => inputRef.current?.focus()}>
@@ -406,15 +420,15 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
               ref={inputRef}
               value={input}
               maxLength={MAX_INPUT}
-              disabled={busy || !booted}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={busy ? "the world is moving..." : "what do you do?"}
+              placeholder={placeholderText}
               autoComplete="off"
               autoCapitalize="off"
               autoCorrect="off"
               spellCheck={false}
               aria-label="game input"
             />
+            {sendLocked && <span className="send-lock">loading</span>}
           </form>
         )}
 
