@@ -15,6 +15,13 @@ type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 type ClientTurn = { role: "user" | "assistant"; content: string };
 
+// Keep the visible scene but drop a stale hidden [WORLD] block.
+function stripWorld(content: string): string {
+  const idx = content.indexOf("[WORLD]");
+  const scene = idx === -1 ? content : content.slice(0, idx);
+  return scene.replace("[SCENE]", "").trim();
+}
+
 function buildMessages(history: ClientTurn[]): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
 
@@ -23,8 +30,20 @@ function buildMessages(history: ClientTurn[]): ChatMessage[] {
     messages.push({ role: "user", content: OPENING_INSTRUCTION });
   }
 
-  for (const turn of trimmed) {
-    const content = String(turn.content ?? "").slice(0, 4000);
+  let lastAssistant = -1;
+  for (let i = 0; i < trimmed.length; i++) {
+    if (trimmed[i].role === "assistant") lastAssistant = i;
+  }
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const turn = trimmed[i];
+    let content = String(turn.content ?? "");
+    // Only the most recent assistant turn keeps its hidden world state; older
+    // ones are trimmed to their visible scene to control context growth.
+    if (turn.role === "assistant" && i !== lastAssistant) {
+      content = stripWorld(content);
+    }
+    content = content.slice(0, 8000);
     if (!content) continue;
     messages.push({ role: turn.role, content });
   }
@@ -78,7 +97,7 @@ export async function POST(req: NextRequest) {
         messages,
         temperature: 1.05,
         top_p: 0.95,
-        max_tokens: 700,
+        max_tokens: 900,
         stream: true,
         // DeepSeek V4 Pro is a dual-mode model; keep reasoning off so replies
         // stay fast and in-character. Harmless for models that ignore it.

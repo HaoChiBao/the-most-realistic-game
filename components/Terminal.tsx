@@ -14,6 +14,36 @@ const END_TOKEN = "<END>";
 // faster than this, even when the model responds instantly.
 const TYPE_CPS = 60;
 
+// The engine replies in two layers: a visible [SCENE] block, then a hidden
+// [WORLD] knowledge base. Only the scene is ever shown to the player.
+function parseScene(raw: string): { scene: string; ended: boolean } {
+  const sceneM = raw.match(/\[\s*SCENE\s*\]/i);
+  const worldM = raw.match(/\[\s*WORLD\s*\]/i);
+  const sceneIdx = sceneM ? (sceneM.index ?? -1) : -1;
+  const worldIdx = worldM ? (worldM.index ?? -1) : -1;
+
+  let text: string;
+  if (sceneIdx !== -1) {
+    const start = sceneIdx + sceneM![0].length;
+    const end = worldIdx > sceneIdx ? worldIdx : raw.length;
+    text = raw.slice(start, end);
+  } else if (worldIdx !== -1) {
+    text = raw.slice(0, worldIdx);
+  } else {
+    // No markers yet: hold off briefly so a partial "[SCENE]" label never
+    // flashes on screen while it is still streaming in.
+    text = raw.length > 24 ? raw : "";
+  }
+
+  let ended = false;
+  const endIdx = text.indexOf(END_TOKEN);
+  if (endIdx !== -1) {
+    ended = true;
+    text = text.slice(0, endIdx);
+  }
+  return { scene: text, ended };
+}
+
 const BOOT_LINES = [
   "REALITY ENGINE v3.1  //  DEEPSEEK CORE",
   "allocating world seed .......... OK",
@@ -76,7 +106,8 @@ export default function Terminal() {
     setBusy(true);
     const engineId = addEntry("engine", "");
 
-    let received = ""; // text ready to reveal (END sentinel already stripped)
+    let received = ""; // visible scene text ready to reveal
+    let rawFull = ""; // full raw output (scene + hidden world), kept for history
     let sawEnd = false;
     let streamDone = false;
     let shown = 0;
@@ -90,9 +121,15 @@ export default function Terminal() {
     const finish = () => {
       if (finished) return;
       finished = true;
-      const clean = received.trim();
-      setEntryText(engineId, clean);
-      historyRef.current.push({ role: "assistant", content: clean });
+      const cleanScene = received.trim();
+      setEntryText(engineId, cleanScene);
+      // Store the full response (including the hidden [WORLD] block) so the
+      // engine keeps its ground truth on the next turn.
+      const cleanRaw = rawFull.replace(END_TOKEN, "").trim();
+      historyRef.current.push({
+        role: "assistant",
+        content: cleanRaw || cleanScene,
+      });
       if (sawEnd) {
         setEnded(true);
         addEntry("system", "— THE WORLD GOES DARK —");
@@ -139,18 +176,14 @@ export default function Terminal() {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let raw = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        raw += decoder.decode(value, { stream: true });
-        if (raw.includes(END_TOKEN)) {
-          sawEnd = true;
-          received = raw.slice(0, raw.indexOf(END_TOKEN));
-        } else {
-          received = raw;
-        }
+        rawFull += decoder.decode(value, { stream: true });
+        const parsed = parseScene(rawFull);
+        received = parsed.scene;
+        sawEnd = parsed.ended;
       }
 
       streamDone = true;
