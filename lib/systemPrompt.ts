@@ -173,3 +173,7 @@ story is truly over, put the token <END> at the very end of the [SCENE] block
 // Sent as the very first user turn to trigger world generation.
 export const OPENING_INSTRUCTION =
   "Begin a new session. Build the hidden [WORLD] knowledge base, but the [SCENE] opening must be only the single sentence 'YOU WAKE UP IN [SETTING].' with no extra detail. Keep all details in the hidden world to reveal slowly.";
+
+// Bumped whenever the prompt/engine behavior changes. Stored alongside shared
+// seeds so we know which engine produced a given world.
+export const ENGINE_VERSION = "v3.1";

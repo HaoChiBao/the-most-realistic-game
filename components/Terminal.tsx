@@ -8,7 +8,7 @@ import {
   type FormEvent,
 } from "react";
 
-const MAX_INPUT = 140;
+const MAX_INPUT = 90;
 const END_TOKEN = "<END>";
 // Typewriter reveal speed cap (characters per second). Text is never revealed
 // faster than this, even when the model responds instantly.
@@ -44,6 +44,12 @@ function parseScene(raw: string): { scene: string; ended: boolean } {
   return { scene: text, ended };
 }
 
+// Rebuild the raw two-layer history message the engine expects from a stored
+// seed's opening + hidden world.
+function composeRaw(opening: string, world: string): string {
+  return `[SCENE]\n${opening.trim()}\n\n[WORLD]\n${world.trim()}`;
+}
+
 const BOOT_LINES = [
   "REALITY ENGINE v3.1  //  DEEPSEEK CORE",
   "allocating world seed .......... OK",
@@ -52,6 +58,17 @@ const BOOT_LINES = [
   "",
   "a new world is generated for every session.",
   "type anything after the >> prompt. any action is valid.",
+  "",
+];
+
+const BOOT_LINES_SEED = [
+  "REALITY ENGINE v3.1  //  DEEPSEEK CORE",
+  "resolving shared seed .......... OK",
+  "restoring hidden world ......... OK",
+  "waking autonomous actors ....... OK",
+  "",
+  "loading a world someone else discovered.",
+  "your choices are your own from here.",
   "",
 ];
 
@@ -65,18 +82,23 @@ type Entry = {
 
 type Turn = { role: "user" | "assistant"; content: string };
 
-export default function Terminal() {
+export default function Terminal({ seedCode }: { seedCode?: string }) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [booted, setBooted] = useState(false);
   const [ended, setEnded] = useState(false);
+  const [worldReady, setWorldReady] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const historyRef = useRef<Turn[]>([]);
   const idRef = useRef(0);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const startedRef = useRef(false);
+  // The seed code of the world currently in play (loaded or after sharing), so
+  // re-sharing the same world returns the same code instead of duplicating it.
+  const seedRef = useRef<string | null>(null);
 
   const nextId = () => ++idRef.current;
 
@@ -99,6 +121,41 @@ export default function Terminal() {
     setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, text } : e)));
   }, []);
 
+  const focusInput = useCallback(
+    () => setTimeout(() => inputRef.current?.focus(), 0),
+    []
+  );
+
+  // Type out already-known static text at the capped typewriter speed.
+  const revealText = useCallback(
+    (text: string) =>
+      new Promise<void>((resolve) => {
+        const id = addEntry("engine", "");
+        let shown = 0;
+        let acc = 0;
+        let last = 0;
+        const tick = (ts: number) => {
+          if (!last) last = ts;
+          acc += ((ts - last) / 1000) * TYPE_CPS;
+          last = ts;
+          const reveal = Math.floor(acc);
+          if (reveal > 0) {
+            acc -= reveal;
+            shown = Math.min(text.length, shown + reveal);
+            setEntryText(id, text.slice(0, shown));
+            scrollToBottom();
+          }
+          if (shown >= text.length) {
+            resolve();
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+    [addEntry, setEntryText, scrollToBottom]
+  );
+
   // Stream one engine response, revealing it at a capped typewriter speed.
   // The network fill and the on-screen reveal are decoupled: tokens land in a
   // buffer as fast as they arrive, while a rAF loop types them out steadily.
@@ -116,8 +173,6 @@ export default function Terminal() {
     let raf = 0;
     let finished = false;
 
-    const focusInput = () => setTimeout(() => inputRef.current?.focus(), 0);
-
     const finish = () => {
       if (finished) return;
       finished = true;
@@ -130,6 +185,7 @@ export default function Terminal() {
         role: "assistant",
         content: cleanRaw || cleanScene,
       });
+      setWorldReady(true);
       if (sawEnd) {
         setEnded(true);
         addEntry("system", "— THE WORLD GOES DARK —");
@@ -196,18 +252,59 @@ export default function Terminal() {
         focusInput();
       }
     }
-  }, [addEntry, scrollToBottom, setEntryText]);
+  }, [addEntry, scrollToBottom, setEntryText, focusInput]);
 
-  // Boot sequence, then generate the opening world.
+  // Load a shared world from its seed code instead of generating a new one.
+  const loadSeed = useCallback(
+    async (code: string) => {
+      setBusy(true);
+      try {
+        const res = await fetch(`/api/seed/${code}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.opening || !data.world) {
+          addEntry(
+            "error",
+            data.error || `NO WORLD FOUND FOR SEED ${code}. Generating a new one.`
+          );
+          setBusy(false);
+          await streamTurn();
+          return;
+        }
+        // Seed the engine's history with the stored world, then show the opening.
+        historyRef.current.push({
+          role: "assistant",
+          content: composeRaw(data.opening, data.world),
+        });
+        seedRef.current = code;
+        addEntry("system", `SEED ${code} LOADED.`);
+        await revealText(String(data.opening).trim());
+        setWorldReady(true);
+        setBusy(false);
+        focusInput();
+      } catch (err) {
+        addEntry("error", `COULD NOT LOAD SEED. ${String(err)}`);
+        setBusy(false);
+        await streamTurn();
+      }
+    },
+    [addEntry, revealText, streamTurn, focusInput]
+  );
+
+  // Boot sequence, then either restore a shared seed or generate a new world.
   const boot = useCallback(async () => {
-    for (const line of BOOT_LINES) {
+    const lines = seedCode ? BOOT_LINES_SEED : BOOT_LINES;
+    for (const line of lines) {
       addEntry("system", line);
       // eslint-disable-next-line no-await-in-loop
       await new Promise((r) => setTimeout(r, 90));
     }
     setBooted(true);
-    await streamTurn();
-  }, [addEntry, streamTurn]);
+    if (seedCode) {
+      await loadSeed(seedCode);
+    } else {
+      await streamTurn();
+    }
+  }, [addEntry, streamTurn, loadSeed, seedCode]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -228,20 +325,55 @@ export default function Terminal() {
     [input, busy, ended, addEntry, streamTurn]
   );
 
-  const restart = useCallback(() => {
+  // Save the current world so others can play it, then copy a share link.
+  const shareWorld = useCallback(async () => {
+    if (busy || sharing || !worldReady) return;
+    const first = historyRef.current[0];
+    if (!first || first.role !== "assistant") return;
+
+    const announce = (code: string) => {
+      const link =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/s/${code}`
+          : `/s/${code}`;
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        navigator.clipboard.writeText(link).catch(() => {});
+      }
+      addEntry("system", `WORLD SAVED. SEED ${code}  //  LINK COPIED: ${link}`);
+    };
+
+    // Already shared/loaded this world: reuse the existing code.
+    if (seedRef.current) {
+      announce(seedRef.current);
+      return;
+    }
+
+    setSharing(true);
+    try {
+      const res = await fetch("/api/seed/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ raw: first.content }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.code) {
+        addEntry("error", data.error || "COULD NOT SAVE WORLD.");
+      } else {
+        seedRef.current = data.code;
+        announce(data.code);
+      }
+    } catch (err) {
+      addEntry("error", `COULD NOT SAVE WORLD. ${String(err)}`);
+    } finally {
+      setSharing(false);
+    }
+  }, [busy, sharing, worldReady, addEntry]);
+
+  // A fresh random world is a clean navigation to the home route.
+  const newWorld = useCallback(() => {
     if (busy) return;
-    historyRef.current = [];
-    setEntries([]);
-    setInput("");
-    setEnded(false);
-    setBooted(false);
-    startedRef.current = false;
-    // Re-run boot on next tick.
-    setTimeout(() => {
-      startedRef.current = true;
-      void boot();
-    }, 0);
-  }, [busy, boot]);
+    if (typeof window !== "undefined") window.location.assign("/");
+  }, [busy]);
 
   const remaining = MAX_INPUT - input.length;
   const showCursor = busy || !booted;
@@ -263,7 +395,7 @@ export default function Terminal() {
         {ended ? (
           <div className="prompt">
             <span className="sigil">::</span>
-            <button className="restart" onClick={restart}>
+            <button className="restart" onClick={newWorld}>
               [ generate a new world ]
             </button>
           </div>
@@ -289,21 +421,31 @@ export default function Terminal() {
         <div className="meta">
           <span>THE MOST REALISTIC GAME</span>
           <span className="controls">
-            <span className={`count ${remaining <= 20 ? "warn" : ""}`}>
-              {remaining} chars left
-            </span>
             {!ended && (
-              <>
-                {"  "}
-                <button
-                  className="restart"
-                  onClick={restart}
-                  disabled={busy}
-                  style={{ marginLeft: 12 }}
-                >
-                  new world
-                </button>
-              </>
+              <span className={`count ${remaining <= 20 ? "warn" : ""}`}>
+                {remaining} chars left
+              </span>
+            )}
+            <button
+              className="restart"
+              onClick={shareWorld}
+              disabled={busy || sharing || !worldReady}
+              style={{ marginLeft: 12 }}
+            >
+              {sharing ? "saving..." : "share world"}
+            </button>
+            <a className="restart" href="/gallery" style={{ marginLeft: 12 }}>
+              worlds
+            </a>
+            {!ended && (
+              <button
+                className="restart"
+                onClick={newWorld}
+                disabled={busy}
+                style={{ marginLeft: 12 }}
+              >
+                new world
+              </button>
             )}
           </span>
         </div>
