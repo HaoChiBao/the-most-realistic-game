@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 const NIM_URL =
   process.env.NIM_BASE_URL?.replace(/\/$/, "") ??
   "https://integrate.api.nvidia.com/v1";
-const MODEL = process.env.NIM_MODEL ?? "deepseek-ai/deepseek-v3_1";
+const MODEL = process.env.NIM_MODEL ?? "deepseek-ai/deepseek-v4-pro";
 const MAX_INPUT_CHARS = 140;
 const MAX_HISTORY = 40; // cap how much backstory we replay to the model
 
@@ -80,9 +80,9 @@ export async function POST(req: NextRequest) {
         top_p: 0.95,
         max_tokens: 700,
         stream: true,
-        // DeepSeek V3.1 is a hybrid model; keep it in fast, non-reasoning mode
-        // so replies stay in-character and snappy. Ignored by non-hybrid models.
-        chat_template_kwargs: { thinking: false },
+        // DeepSeek V4 Pro is a dual-mode model; keep reasoning off so replies
+        // stay fast and in-character. Harmless for models that ignore it.
+        reasoning_effort: "none",
       }),
     });
   } catch (err) {
@@ -129,8 +129,13 @@ export async function POST(req: NextRequest) {
               const json = JSON.parse(data);
               const delta = json?.choices?.[0]?.delta;
               // Ignore reasoning_content from hybrid/R1 models; only emit prose.
-              const piece: string | undefined = delta?.content;
-              if (piece) controller.enqueue(encoder.encode(piece));
+              let piece: string | undefined = delta?.content;
+              if (piece) {
+                // Backstop: the engine is told never to use em/en dashes;
+                // enforce it here too so none can slip through.
+                piece = piece.replace(/\s*[—–]\s*/g, ", ");
+                controller.enqueue(encoder.encode(piece));
+              }
             } catch {
               // Ignore partial/non-JSON keep-alive chunks.
             }

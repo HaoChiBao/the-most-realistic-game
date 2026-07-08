@@ -44,7 +44,7 @@ server and is never exposed to the browser.
 | Variable       | Default                                  | Notes                              |
 | -------------- | ---------------------------------------- | ---------------------------------- |
 | `NIM_API_KEY`  | —                                        | Required. Your NVIDIA NIM key.     |
-| `NIM_MODEL`    | `deepseek-ai/deepseek-v3_1`              | Any DeepSeek model on NIM.         |
+| `NIM_MODEL`    | `deepseek-ai/deepseek-v4-pro`            | Any DeepSeek model on NIM.         |
 | `NIM_BASE_URL` | `https://integrate.api.nvidia.com/v1`    | OpenAI-compatible endpoint.        |
 
 ## Deploying to Vercel

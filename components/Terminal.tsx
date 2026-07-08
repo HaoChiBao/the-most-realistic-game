@@ -10,6 +10,9 @@ import {
 
 const MAX_INPUT = 140;
 const END_TOKEN = "<END>";
+// Typewriter reveal speed cap (characters per second). Text is never revealed
+// faster than this, even when the model responds instantly.
+const TYPE_CPS = 60;
 
 const BOOT_LINES = [
   "REALITY ENGINE v3.1  //  DEEPSEEK CORE",
@@ -62,17 +65,59 @@ export default function Terminal() {
     return id;
   }, []);
 
-  const appendToEntry = useCallback((id: number, chunk: string) => {
-    setEntries((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, text: e.text + chunk } : e))
-    );
+  const setEntryText = useCallback((id: number, text: string) => {
+    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, text } : e)));
   }, []);
 
-  // Stream one engine response given the current history.
+  // Stream one engine response, revealing it at a capped typewriter speed.
+  // The network fill and the on-screen reveal are decoupled: tokens land in a
+  // buffer as fast as they arrive, while a rAF loop types them out steadily.
   const streamTurn = useCallback(async () => {
     setBusy(true);
     const engineId = addEntry("engine", "");
-    let full = "";
+
+    let received = ""; // text ready to reveal (END sentinel already stripped)
+    let sawEnd = false;
+    let streamDone = false;
+    let shown = 0;
+    let acc = 0; // fractional character budget carried between frames
+    let last = 0;
+    let raf = 0;
+    let finished = false;
+
+    const focusInput = () => setTimeout(() => inputRef.current?.focus(), 0);
+
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      const clean = received.trim();
+      setEntryText(engineId, clean);
+      historyRef.current.push({ role: "assistant", content: clean });
+      if (sawEnd) {
+        setEnded(true);
+        addEntry("system", "— THE WORLD GOES DARK —");
+      }
+      setBusy(false);
+      focusInput();
+    };
+
+    const tick = (ts: number) => {
+      if (!last) last = ts;
+      acc += ((ts - last) / 1000) * TYPE_CPS;
+      last = ts;
+      const reveal = Math.floor(acc);
+      if (reveal > 0 && shown < received.length) {
+        acc -= reveal;
+        shown = Math.min(received.length, shown + reveal);
+        setEntryText(engineId, received.slice(0, shown).trimStart());
+        scrollToBottom();
+      }
+      if (streamDone && shown >= received.length) {
+        finish();
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
 
     try {
       const res = await fetch("/api/game", {
@@ -85,45 +130,40 @@ export default function Terminal() {
         const detail = await res.text().catch(() => "");
         setEntries((prev) => prev.filter((e) => e.id !== engineId));
         addEntry("error", detail || `ENGINE ERROR [${res.status}].`);
+        setBusy(false);
+        focusInput();
         return;
       }
 
+      raf = requestAnimationFrame(tick);
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      let raw = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        full += chunk;
-
-        // Hide the end sentinel from the player as it streams in.
-        const display = full.includes(END_TOKEN)
-          ? full.slice(0, full.indexOf(END_TOKEN))
-          : full;
-        setEntries((prev) =>
-          prev.map((e) =>
-            e.id === engineId ? { ...e, text: display.trimStart() } : e
-          )
-        );
-        scrollToBottom();
+        raw += decoder.decode(value, { stream: true });
+        if (raw.includes(END_TOKEN)) {
+          sawEnd = true;
+          received = raw.slice(0, raw.indexOf(END_TOKEN));
+        } else {
+          received = raw;
+        }
       }
 
-      const clean = full.replace(END_TOKEN, "").trim();
-      historyRef.current.push({ role: "assistant", content: clean });
-
-      if (full.includes(END_TOKEN)) {
-        setEnded(true);
-        addEntry("system", "— THE WORLD GOES DARK —");
-      }
+      streamDone = true;
     } catch (err) {
-      setEntries((prev) => prev.filter((e) => e.id !== engineId));
-      addEntry("error", `SIGNAL LOST. ${String(err)}`);
-    } finally {
-      setBusy(false);
-      setTimeout(() => inputRef.current?.focus(), 0);
+      cancelAnimationFrame(raf);
+      if (!finished) {
+        setEntries((prev) => prev.filter((e) => e.id !== engineId));
+        addEntry("error", `SIGNAL LOST. ${String(err)}`);
+        setBusy(false);
+        focusInput();
+      }
     }
-  }, [addEntry, scrollToBottom]);
+  }, [addEntry, scrollToBottom, setEntryText]);
 
   // Boot sequence, then generate the opening world.
   const boot = useCallback(async () => {
