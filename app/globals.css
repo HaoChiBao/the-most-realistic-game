@@ -133,6 +133,19 @@ body {
   text-shadow: 0 0 6px rgba(255, 91, 91, 0.4);
 }
 
+.entry.diverge {
+  color: #ffd24a;
+  text-shadow: 0 0 8px rgba(255, 210, 74, 0.45);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: clamp(12px, 1.8vmin, 15px);
+}
+
+.entry.diverge::before {
+  content: ">> ";
+  opacity: 0.85;
+}
+
 .cursor {
   display: inline-block;
   width: 0.62em;
@@ -196,6 +209,25 @@ body {
   opacity: 0.7;
   white-space: nowrap;
   animation: blink 1.2s steps(1) infinite;
+}
+
+.end-prompt {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.end-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.end-label {
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffd24a;
+  margin-right: 8px;
 }
 
 .meta {

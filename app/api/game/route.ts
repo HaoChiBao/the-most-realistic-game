@@ -1,21 +1,16 @@
 import { NextRequest } from "next/server";
 import { SYSTEM_PROMPT, OPENING_INSTRUCTION } from "@/lib/systemPrompt";
+import { getLlmConfig } from "@/lib/llm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const NIM_URL =
-  process.env.NIM_BASE_URL?.replace(/\/$/, "") ??
-  "https://integrate.api.nvidia.com/v1";
-const MODEL = process.env.NIM_MODEL ?? "deepseek-ai/deepseek-v4-pro";
 const MAX_INPUT_CHARS = 140;
-const MAX_HISTORY = 40; // cap how much backstory we replay to the model
+const MAX_HISTORY = 40;
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
-
 type ClientTurn = { role: "user" | "assistant"; content: string };
 
-// Keep the visible scene but drop a stale hidden [WORLD] block.
 function stripWorld(content: string): string {
   const idx = content.indexOf("[WORLD]");
   const scene = idx === -1 ? content : content.slice(0, idx);
@@ -38,8 +33,6 @@ function buildMessages(history: ClientTurn[]): ChatMessage[] {
   for (let i = 0; i < trimmed.length; i++) {
     const turn = trimmed[i];
     let content = String(turn.content ?? "");
-    // Only the most recent assistant turn keeps its hidden world state; older
-    // ones are trimmed to their visible scene to control context growth.
     if (turn.role === "assistant" && i !== lastAssistant) {
       content = stripWorld(content);
     }
@@ -52,10 +45,10 @@ function buildMessages(history: ClientTurn[]): ChatMessage[] {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.NIM_API_KEY;
-  if (!apiKey) {
+  const llm = getLlmConfig();
+  if (!llm) {
     return new Response(
-      "SYSTEM FAILURE: NIM_API_KEY is not configured on the server.",
+      "SYSTEM FAILURE: OPENAI_API_KEY (or NIM_API_KEY) is not configured on the server.",
       { status: 500 }
     );
   }
@@ -85,23 +78,21 @@ export async function POST(req: NextRequest) {
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${NIM_URL}/chat/completions`, {
+    upstream = await fetch(`${llm.url}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${llm.apiKey}`,
         Accept: "text/event-stream",
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: llm.model,
         messages,
-        temperature: 1.05,
+        temperature: llm.provider === "openai" ? 1.0 : 1.05,
         top_p: 0.95,
-        max_tokens: 900,
+        max_tokens: 1200,
         stream: true,
-        // DeepSeek V4 Pro is a dual-mode model; keep reasoning off so replies
-        // stay fast and in-character. Harmless for models that ignore it.
-        reasoning_effort: "none",
+        ...llm.extraBody,
       }),
     });
   } catch (err) {
@@ -147,11 +138,8 @@ export async function POST(req: NextRequest) {
             try {
               const json = JSON.parse(data);
               const delta = json?.choices?.[0]?.delta;
-              // Ignore reasoning_content from hybrid/R1 models; only emit prose.
               let piece: string | undefined = delta?.content;
               if (piece) {
-                // Backstop: the engine is told never to use em/en dashes;
-                // enforce it here too so none can slip through.
                 piece = piece.replace(/\s*[—–]\s*/g, ", ");
                 controller.enqueue(encoder.encode(piece));
               }

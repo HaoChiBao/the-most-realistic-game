@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
-import { MODEL_LABEL } from "@/lib/model";
+import { getModelLabel } from "@/lib/model";
 import { ENGINE_VERSION } from "@/lib/systemPrompt";
 import {
   composeRaw,
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       p_setting: setting,
       p_opening: opening,
       p_world_state: world,
-      p_model: MODEL_LABEL,
+      p_model: getModelLabel(),
       p_engine_ver: ENGINE_VERSION,
     });
 

@@ -7,62 +7,32 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import {
+  parseScene,
+  stripControlTokens,
+} from "@/lib/sceneParse";
 
 const MAX_INPUT = 90;
-const END_TOKEN = "<END>";
-// Typewriter reveal speed cap (characters per second). Text is never revealed
-// faster than this, even when the model responds instantly.
+const MAX_CHECKPOINTS = 20;
+// Typewriter reveal speed cap (characters per second).
 const TYPE_CPS = 60;
 
-// The engine replies in two layers: a visible [SCENE] block, then a hidden
-// [WORLD] knowledge base. Only the scene is ever shown to the player.
-function parseScene(raw: string): { scene: string; ended: boolean } {
-  const sceneM = raw.match(/\[\s*SCENE\s*\]/i);
-  const worldM = raw.match(/\[\s*WORLD\s*\]/i);
-  const sceneIdx = sceneM ? (sceneM.index ?? -1) : -1;
-  const worldIdx = worldM ? (worldM.index ?? -1) : -1;
-
-  let text: string;
-  if (sceneIdx !== -1) {
-    const start = sceneIdx + sceneM![0].length;
-    const end = worldIdx > sceneIdx ? worldIdx : raw.length;
-    text = raw.slice(start, end);
-  } else if (worldIdx !== -1) {
-    text = raw.slice(0, worldIdx);
-  } else {
-    // No markers yet: hold off briefly so a partial "[SCENE]" label never
-    // flashes on screen while it is still streaming in.
-    text = raw.length > 24 ? raw : "";
-  }
-
-  let ended = false;
-  const endIdx = text.indexOf(END_TOKEN);
-  if (endIdx !== -1) {
-    ended = true;
-    text = text.slice(0, endIdx);
-  }
-  return { scene: text, ended };
-}
-
-// Rebuild the raw two-layer history message the engine expects from a stored
-// seed's opening + hidden world.
 function composeRaw(opening: string, world: string): string {
   return `[SCENE]\n${opening.trim()}\n\n[WORLD]\n${world.trim()}`;
 }
 
-const BOOT_LINES = [
-  "REALITY ENGINE v3.2  //  DEEPSEEK CORE",
+const BOOT_LINES_BASE = [
   "allocating world seed .......... OK",
-  "spinning up hidden rules ....... OK",
-  "seeding autonomous actors ...... OK",
+  "spinning up story threads ...... OK",
+  "seeding character personas ..... OK",
+  "loading end clauses ............ OK",
   "",
-  "a new world is generated for every session.",
-  "type anything after the >> prompt. any action is valid.",
+  "actions have consequences. death is possible.",
+  "type anything after the >> prompt.",
   "",
 ];
 
-const BOOT_LINES_SEED = [
-  "REALITY ENGINE v3.2  //  DEEPSEEK CORE",
+const BOOT_LINES_SEED_BASE = [
   "resolving shared seed .......... OK",
   "restoring hidden world ......... OK",
   "waking autonomous actors ....... OK",
@@ -72,7 +42,7 @@ const BOOT_LINES_SEED = [
   "",
 ];
 
-type EntryType = "system" | "engine" | "player" | "error";
+type EntryType = "system" | "engine" | "player" | "error" | "diverge";
 
 type Entry = {
   id: number;
@@ -82,23 +52,29 @@ type Entry = {
 
 type Turn = { role: "user" | "assistant"; content: string };
 
+type Checkpoint = {
+  history: Turn[];
+  entries: Entry[];
+};
+
 export default function Terminal({ seedCode }: { seedCode?: string }) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [booted, setBooted] = useState(false);
   const [ended, setEnded] = useState(false);
+  const [endLabel, setEndLabel] = useState<string | null>(null);
   const [worldReady, setWorldReady] = useState(false);
   const [sharing, setSharing] = useState(false);
 
   const historyRef = useRef<Turn[]>([]);
+  const checkpointsRef = useRef<Checkpoint[]>([]);
+  const openingWorldRef = useRef<Turn | null>(null);
   const idRef = useRef(0);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const startedRef = useRef(false);
-  // The seed code of the world currently in play (loaded or after sharing), so
-  // re-sharing the same world returns the same code instead of duplicating it.
-  const seedRef = useRef<string | null>(null);
+  const seedRef = useRef<string | null>(seedCode ?? null);
 
   const nextId = () => ++idRef.current;
 
@@ -126,7 +102,17 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     []
   );
 
-  // Type out already-known static text at the capped typewriter speed.
+  const saveCheckpoint = useCallback(() => {
+    const cp: Checkpoint = {
+      history: historyRef.current.map((t) => ({ ...t })),
+      entries: entries.map((e) => ({ ...e })),
+    };
+    checkpointsRef.current.push(cp);
+    if (checkpointsRef.current.length > MAX_CHECKPOINTS) {
+      checkpointsRef.current.shift();
+    }
+  }, [entries]);
+
   const revealText = useCallback(
     (text: string) =>
       new Promise<void>((resolve) => {
@@ -156,19 +142,19 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     [addEntry, setEntryText, scrollToBottom]
   );
 
-  // Stream one engine response, revealing it at a capped typewriter speed.
-  // The network fill and the on-screen reveal are decoupled: tokens land in a
-  // buffer as fast as they arrive, while a rAF loop types them out steadily.
   const streamTurn = useCallback(async () => {
     setBusy(true);
     const engineId = addEntry("engine", "");
 
-    let received = ""; // visible scene text ready to reveal
-    let rawFull = ""; // full raw output (scene + hidden world), kept for history
+    let received = "";
+    let rawFull = "";
     let sawEnd = false;
+    let sawDiverge = false;
+    let divergeShown = false;
+    let label: string | null = null;
     let streamDone = false;
     let shown = 0;
-    let acc = 0; // fractional character budget carried between frames
+    let acc = 0;
     let last = 0;
     let raf = 0;
     let finished = false;
@@ -178,18 +164,26 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       finished = true;
       const cleanScene = received.trim();
       setEntryText(engineId, cleanScene);
-      // Store the full response (including the hidden [WORLD] block) so the
-      // engine keeps its ground truth on the next turn.
-      const cleanRaw = rawFull.replace(END_TOKEN, "").trim();
-      historyRef.current.push({
+
+      const cleanRaw = stripControlTokens(rawFull);
+      const assistantTurn: Turn = {
         role: "assistant",
         content: cleanRaw || cleanScene,
-      });
-      setWorldReady(true);
-      if (sawEnd) {
-        setEnded(true);
-        addEntry("system", "— THE WORLD GOES DARK —");
+      };
+      historyRef.current.push(assistantTurn);
+
+      if (!openingWorldRef.current) {
+        openingWorldRef.current = { ...assistantTurn };
       }
+
+      setWorldReady(true);
+
+      if (sawEnd) {
+        setEndLabel(label);
+        setEnded(true);
+        addEntry("system", label ? `— ${label} —` : "— THE WORLD GOES DARK —");
+      }
+
       setBusy(false);
       focusInput();
     };
@@ -240,6 +234,12 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         const parsed = parseScene(rawFull);
         received = parsed.scene;
         sawEnd = parsed.ended;
+        if (parsed.diverged) sawDiverge = true;
+        if (parsed.endLabel) label = parsed.endLabel;
+        if (parsed.diverged && !divergeShown) {
+          divergeShown = true;
+          addEntry("diverge", "YOUR STORY IS CHANGING");
+        }
       }
 
       streamDone = true;
@@ -254,7 +254,6 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     }
   }, [addEntry, scrollToBottom, setEntryText, focusInput]);
 
-  // Load a shared world from its seed code instead of generating a new one.
   const loadSeed = useCallback(
     async (code: string) => {
       setBusy(true);
@@ -270,11 +269,10 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
           await streamTurn();
           return;
         }
-        // Seed the engine's history with the stored world, then show the opening.
-        historyRef.current.push({
-          role: "assistant",
-          content: composeRaw(data.opening, data.world),
-        });
+        const raw = composeRaw(data.opening, data.world);
+        const turn: Turn = { role: "assistant", content: raw };
+        historyRef.current.push(turn);
+        openingWorldRef.current = { ...turn };
         seedRef.current = code;
         addEntry("system", `SEED ${code} LOADED.`);
         await revealText(String(data.opening).trim());
@@ -290,9 +288,23 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     [addEntry, revealText, streamTurn, focusInput]
   );
 
-  // Boot sequence, then either restore a shared seed or generate a new world.
   const boot = useCallback(async () => {
-    const lines = seedCode ? BOOT_LINES_SEED : BOOT_LINES;
+    let engineLine = "REALITY ENGINE v3.3  //  ONLINE";
+    try {
+      const res = await fetch("/api/engine");
+      if (res.ok) {
+        const data = await res.json();
+        const ver = data.version ?? "v3.3";
+        const banner = data.banner ?? "ONLINE";
+        engineLine = `REALITY ENGINE ${ver}  //  ${banner}`;
+      }
+    } catch {
+      // keep default line
+    }
+
+    const lines = seedCode
+      ? [engineLine, ...BOOT_LINES_SEED_BASE]
+      : [engineLine, ...BOOT_LINES_BASE];
     for (const line of lines) {
       addEntry("system", line);
       // eslint-disable-next-line no-await-in-loop
@@ -312,7 +324,6 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     void boot();
   }, [boot]);
 
-  // Focus the field right away so the player can type while the world loads.
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -321,18 +332,16 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     async (e: FormEvent) => {
       e.preventDefault();
       const value = input.trim().slice(0, MAX_INPUT);
-      // The field is always typeable, but sending is locked while the world is
-      // still loading or a response is streaming. Preserve what was typed.
       if (!value || busy || ended || !booted) return;
+      saveCheckpoint();
       setInput("");
       addEntry("player", value);
       historyRef.current.push({ role: "user", content: value });
       await streamTurn();
     },
-    [input, busy, ended, booted, addEntry, streamTurn]
+    [input, busy, ended, booted, addEntry, streamTurn, saveCheckpoint]
   );
 
-  // Save the current world so others can play it, then copy a share link.
   const shareWorld = useCallback(async () => {
     if (busy || sharing || !worldReady) return;
     const first = historyRef.current[0];
@@ -349,7 +358,6 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       addEntry("system", `WORLD SAVED. SEED ${code}  //  LINK COPIED: ${link}`);
     };
 
-    // Already shared/loaded this world: reuse the existing code.
     if (seedRef.current) {
       announce(seedRef.current);
       return;
@@ -376,16 +384,56 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     }
   }, [busy, sharing, worldReady, addEntry]);
 
-  // A fresh random world is a clean navigation to the home route.
   const newWorld = useCallback(() => {
     if (busy) return;
     if (typeof window !== "undefined") window.location.assign("/");
   }, [busy]);
 
+  const retryWorld = useCallback(() => {
+    if (busy) return;
+    const code = seedRef.current;
+    if (code) {
+      window.location.assign(`/s/${code}`);
+      return;
+    }
+    const opening = openingWorldRef.current;
+    if (!opening) {
+      newWorld();
+      return;
+    }
+    historyRef.current = [];
+    checkpointsRef.current = [];
+    setEntries([]);
+    setInput("");
+    setEnded(false);
+    setEndLabel(null);
+    setWorldReady(false);
+    setBooted(true);
+    historyRef.current.push({ ...opening });
+    const scene = parseScene(opening.content).scene;
+    void revealText(scene).then(() => {
+      setWorldReady(true);
+      focusInput();
+    });
+  }, [busy, newWorld, revealText, focusInput]);
+
+  const rewind = useCallback(() => {
+    if (busy) return;
+    const cp = checkpointsRef.current.pop();
+    if (!cp) return;
+    historyRef.current = cp.history.map((t) => ({ ...t }));
+    setEntries(cp.entries.map((e) => ({ ...e })));
+    idRef.current = cp.entries.reduce((m, e) => Math.max(m, e.id), 0);
+    setEnded(false);
+    setEndLabel(null);
+    setInput("");
+    focusInput();
+  }, [busy, focusInput]);
+
   const remaining = MAX_INPUT - input.length;
   const showCursor = busy || !booted;
-  // Sending is locked while the world loads or a reply streams; typing is not.
   const sendLocked = busy || !booted;
+  const canRewind = checkpointsRef.current.length > 0;
   const placeholderText = !booted
     ? "loading the world... you can start typing"
     : busy
@@ -407,11 +455,21 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         </div>
 
         {ended ? (
-          <div className="prompt">
+          <div className="prompt end-prompt">
             <span className="sigil">::</span>
-            <button className="restart" onClick={newWorld}>
-              [ generate a new world ]
-            </button>
+            <span className="end-actions">
+              {canRewind && (
+                <button className="restart" onClick={rewind} disabled={busy}>
+                  [ rewind ]
+                </button>
+              )}
+              <button className="restart" onClick={retryWorld} disabled={busy}>
+                [ retry this world ]
+              </button>
+              <button className="restart" onClick={newWorld} disabled={busy}>
+                [ new world ]
+              </button>
+            </span>
           </div>
         ) : (
           <form className="prompt" onSubmit={submit}>
@@ -439,6 +497,9 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
               <span className={`count ${remaining <= 20 ? "warn" : ""}`}>
                 {remaining} chars left
               </span>
+            )}
+            {ended && endLabel && (
+              <span className="end-label">{endLabel}</span>
             )}
             <button
               className="restart"
