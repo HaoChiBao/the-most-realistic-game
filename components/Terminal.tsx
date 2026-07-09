@@ -11,6 +11,13 @@ import {
   parseScene,
   stripControlTokens,
 } from "@/lib/sceneParse";
+import {
+  buildSessionSnapshot,
+  canRestoreSession,
+  clearSession,
+  loadSession,
+  saveSession,
+} from "@/lib/save";
 
 const MAX_INPUT = 90;
 const MAX_CHECKPOINTS = 20;
@@ -75,8 +82,28 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const startedRef = useRef(false);
   const seedRef = useRef<string | null>(seedCode ?? null);
+  const entriesRef = useRef<Entry[]>([]);
+  const endedRef = useRef(false);
+  const endLabelRef = useRef<string | null>(null);
+  const worldReadyRef = useRef(false);
 
   const nextId = () => ++idRef.current;
+
+  const persistSession = useCallback(() => {
+    if (historyRef.current.length === 0) return;
+    saveSession(
+      buildSessionSnapshot({
+        seedCode: seedRef.current,
+        history: historyRef.current,
+        entries: entriesRef.current,
+        nextEntryId: idRef.current,
+        ended: endedRef.current,
+        endLabel: endLabelRef.current,
+        worldReady: worldReadyRef.current,
+        openingWorld: openingWorldRef.current,
+      })
+    );
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     const el = logRef.current;
@@ -84,12 +111,38 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   }, []);
 
   useEffect(() => {
+    entriesRef.current = entries;
+  }, [entries]);
+
+  useEffect(() => {
+    endedRef.current = ended;
+  }, [ended]);
+
+  useEffect(() => {
+    endLabelRef.current = endLabel;
+  }, [endLabel]);
+
+  useEffect(() => {
+    worldReadyRef.current = worldReady;
+  }, [worldReady]);
+
+  useEffect(() => {
     scrollToBottom();
   }, [entries, scrollToBottom]);
 
+  useEffect(() => {
+    const onUnload = () => persistSession();
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, [persistSession]);
+
   const addEntry = useCallback((type: EntryType, text: string) => {
     const id = nextId();
-    setEntries((prev) => [...prev, { id, type, text }]);
+    setEntries((prev) => {
+      const next = [...prev, { id, type, text }];
+      entriesRef.current = next;
+      return next;
+    });
     return id;
   }, []);
 
@@ -181,11 +234,14 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       if (sawEnd) {
         setEndLabel(label);
         setEnded(true);
+        endLabelRef.current = label;
+        endedRef.current = true;
         addEntry("system", label ? `— ${label} —` : "— THE WORLD GOES DARK —");
       }
 
       setBusy(false);
       focusInput();
+      setTimeout(() => persistSession(), 0);
     };
 
     const tick = (ts: number) => {
@@ -252,7 +308,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         focusInput();
       }
     }
-  }, [addEntry, scrollToBottom, setEntryText, focusInput]);
+  }, [addEntry, scrollToBottom, setEntryText, focusInput, persistSession]);
 
   const loadSeed = useCallback(
     async (code: string) => {
@@ -277,15 +333,17 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         addEntry("system", `SEED ${code} LOADED.`);
         await revealText(String(data.opening).trim());
         setWorldReady(true);
+        worldReadyRef.current = true;
         setBusy(false);
         focusInput();
+        persistSession();
       } catch (err) {
         addEntry("error", `COULD NOT LOAD SEED. ${String(err)}`);
         setBusy(false);
         await streamTurn();
       }
     },
-    [addEntry, revealText, streamTurn, focusInput]
+    [addEntry, revealText, streamTurn, focusInput, persistSession]
   );
 
   const boot = useCallback(async () => {
@@ -302,6 +360,47 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       // keep default line
     }
 
+    const saved = loadSession();
+    if (saved && canRestoreSession(saved, seedCode)) {
+      historyRef.current = saved.history.map((t) => ({ ...t }));
+      idRef.current = saved.nextEntryId;
+      seedRef.current = saved.seedCode;
+      openingWorldRef.current = saved.openingWorld
+        ? { ...saved.openingWorld }
+        : saved.history[0]?.role === "assistant"
+          ? { ...saved.history[0] }
+          : null;
+      const last = historyRef.current[historyRef.current.length - 1];
+      let restoredEntries = saved.entries;
+      if (last?.role === "user" && !saved.ended) {
+        while (
+          restoredEntries.length > 0 &&
+          restoredEntries[restoredEntries.length - 1].type === "engine"
+        ) {
+          restoredEntries = restoredEntries.slice(0, -1);
+        }
+      }
+      setEntries(restoredEntries);
+      entriesRef.current = restoredEntries;
+      setEnded(saved.ended);
+      endedRef.current = saved.ended;
+      setEndLabel(saved.endLabel);
+      endLabelRef.current = saved.endLabel;
+      setWorldReady(saved.worldReady);
+      worldReadyRef.current = saved.worldReady;
+      setBooted(true);
+      if (last?.role === "user" && !saved.ended) {
+        await streamTurn();
+      } else {
+        focusInput();
+      }
+      return;
+    }
+
+    if (saved && seedCode && saved.seedCode !== seedCode) {
+      clearSession();
+    }
+
     const lines = seedCode
       ? [engineLine, ...BOOT_LINES_SEED_BASE]
       : [engineLine, ...BOOT_LINES_BASE];
@@ -316,7 +415,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     } else {
       await streamTurn();
     }
-  }, [addEntry, streamTurn, loadSeed, seedCode]);
+  }, [addEntry, streamTurn, loadSeed, seedCode, focusInput]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -337,9 +436,10 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       setInput("");
       addEntry("player", value);
       historyRef.current.push({ role: "user", content: value });
+      persistSession();
       await streamTurn();
     },
-    [input, busy, ended, booted, addEntry, streamTurn, saveCheckpoint]
+    [input, busy, ended, booted, addEntry, streamTurn, saveCheckpoint, persistSession]
   );
 
   const shareWorld = useCallback(async () => {
@@ -386,6 +486,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
 
   const newWorld = useCallback(() => {
     if (busy) return;
+    clearSession();
     if (typeof window !== "undefined") window.location.assign("/");
   }, [busy]);
 
@@ -413,9 +514,11 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     const scene = parseScene(opening.content).scene;
     void revealText(scene).then(() => {
       setWorldReady(true);
+      worldReadyRef.current = true;
       focusInput();
+      persistSession();
     });
-  }, [busy, newWorld, revealText, focusInput]);
+  }, [busy, newWorld, revealText, focusInput, persistSession]);
 
   const rewind = useCallback(() => {
     if (busy) return;
@@ -426,9 +529,12 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     idRef.current = cp.entries.reduce((m, e) => Math.max(m, e.id), 0);
     setEnded(false);
     setEndLabel(null);
+    endedRef.current = false;
+    endLabelRef.current = null;
     setInput("");
     focusInput();
-  }, [busy, focusInput]);
+    persistSession();
+  }, [busy, focusInput, persistSession]);
 
   const remaining = MAX_INPUT - input.length;
   const showCursor = busy || !booted;
