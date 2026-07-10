@@ -1,12 +1,21 @@
 import { NextRequest } from "next/server";
 import { SYSTEM_PROMPT, OPENING_INSTRUCTION } from "@/lib/systemPrompt";
 import { getLlmConfig } from "@/lib/llm";
+import {
+  clientIp,
+  rateLimit,
+  rateLimitHeaders,
+} from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_INPUT_CHARS = 140;
 const MAX_HISTORY = 40;
+/** Soft per-IP cap so a public LLM key isn't drained by a single client. */
+const GAME_RATE_LIMIT = 30;
+const GAME_RATE_WINDOW_MS = 60_000;
+const MAX_TURNS_PER_REQUEST = MAX_HISTORY;
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 type ClientTurn = { role: "user" | "assistant"; content: string };
@@ -45,6 +54,25 @@ function buildMessages(history: ClientTurn[]): ChatMessage[] {
 }
 
 export async function POST(req: NextRequest) {
+  const ip = clientIp(req);
+  const limited = rateLimit(`game:${ip}`, GAME_RATE_LIMIT, GAME_RATE_WINDOW_MS);
+  if (!limited.ok) {
+    const retryAfter = Math.max(
+      1,
+      Math.ceil((limited.resetAt - Date.now()) / 1000)
+    );
+    return new Response(
+      "TOO MANY ACTIONS. The world needs a moment. Try again shortly.",
+      {
+        status: 429,
+        headers: {
+          ...rateLimitHeaders(limited),
+          "Retry-After": String(retryAfter),
+        },
+      }
+    );
+  }
+
   const llm = getLlmConfig();
   if (!llm) {
     return new Response(
@@ -61,6 +89,13 @@ export async function POST(req: NextRequest) {
   }
 
   const rawHistory = Array.isArray(body.history) ? body.history : [];
+  if (rawHistory.length > MAX_TURNS_PER_REQUEST + 10) {
+    return new Response("SESSION TOO LONG. Start a new world.", {
+      status: 400,
+      headers: rateLimitHeaders(limited),
+    });
+  }
+
   const history: ClientTurn[] = rawHistory
     .filter(
       (t): t is ClientTurn =>
@@ -163,6 +198,7 @@ export async function POST(req: NextRequest) {
       "Content-Type": "text/plain; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       "X-Accel-Buffering": "no",
+      ...rateLimitHeaders(limited),
     },
   });
 }

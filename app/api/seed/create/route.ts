@@ -3,23 +3,53 @@ import { getSupabase } from "@/lib/supabase";
 import { getModelLabel } from "@/lib/model";
 import { ENGINE_VERSION } from "@/lib/systemPrompt";
 import {
-  composeRaw,
   deriveSetting,
   makeSeedCode,
   splitSceneWorld,
 } from "@/lib/seed";
+import {
+  clientIp,
+  rateLimit,
+  rateLimitHeaders,
+} from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const SEED_CREATE_LIMIT = 10;
+const SEED_CREATE_WINDOW_MS = 60_000;
+
 type Body = { raw?: string; opening?: string; world?: string };
 
 export async function POST(req: NextRequest) {
+  const ip = clientIp(req);
+  const limited = rateLimit(
+    `seed-create:${ip}`,
+    SEED_CREATE_LIMIT,
+    SEED_CREATE_WINDOW_MS
+  );
+  if (!limited.ok) {
+    const retryAfter = Math.max(
+      1,
+      Math.ceil((limited.resetAt - Date.now()) / 1000)
+    );
+    return NextResponse.json(
+      { error: "Too many worlds saved. Try again shortly." },
+      {
+        status: 429,
+        headers: {
+          ...rateLimitHeaders(limited),
+          "Retry-After": String(retryAfter),
+        },
+      }
+    );
+  }
+
   const supabase = getSupabase();
   if (!supabase) {
     return NextResponse.json(
       { error: "Seed storage is not configured on the server." },
-      { status: 503 }
+      { status: 503, headers: rateLimitHeaders(limited) }
     );
   }
 
@@ -42,7 +72,7 @@ export async function POST(req: NextRequest) {
   if (!opening || !world) {
     return NextResponse.json(
       { error: "This world is not ready to share yet." },
-      { status: 400 }
+      { status: 400, headers: rateLimitHeaders(limited) }
     );
   }
 
@@ -64,19 +94,22 @@ export async function POST(req: NextRequest) {
     });
 
     if (!error) {
-      return NextResponse.json({ code, setting });
+      return NextResponse.json(
+        { code, setting },
+        { headers: rateLimitHeaders(limited) }
+      );
     }
     // 23505 = unique_violation: code already taken, try another.
     if (error.code !== "23505") {
       return NextResponse.json(
         { error: "Could not save this world. Try again." },
-        { status: 500 }
+        { status: 500, headers: rateLimitHeaders(limited) }
       );
     }
   }
 
   return NextResponse.json(
     { error: "Could not allocate a seed code. Try again." },
-    { status: 500 }
+    { status: 500, headers: rateLimitHeaders(limited) }
   );
 }
