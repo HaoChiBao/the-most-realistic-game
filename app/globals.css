@@ -101,6 +101,7 @@ body {
   padding-right: 8px;
   scrollbar-width: thin;
   scrollbar-color: var(--phosphor-dim) transparent;
+  user-select: text;
 }
 
 .log::-webkit-scrollbar {
