@@ -28,9 +28,18 @@ const diverge = parseScene("[SCENE]\nx<DIVERGE><SOFT_END><END><ENDLABEL>L</ENDLA
 assert(diverge.diverged === true, "diverge detected");
 assert(!diverge.scene.includes("DIVERGE"), "diverge token stripped");
 
-// No [SCENE] marker — never leak the raw stream buffer (e.g. STATE JSON).
+// No [SCENE] marker — never leak bare STATE JSON.
 const noMarker = parseScene('{"world_type":"grounded","player_location":"x"}');
-assert(noMarker.scene === "", "no scene without [SCENE] marker");
+assert(noMarker.scene === "", "no scene for bare JSON");
+
+// Model often omits [SCENE] but includes [WORLD] — still show prose.
+const noSceneMarker = parseScene(
+  "You open the wallet. Inside are a few bills.\n\n[WORLD]\nSTATE\n{\"world_type\":\"grounded\"}"
+);
+assert(
+  noSceneMarker.scene === "You open the wallet. Inside are a few bills.",
+  "prose without [SCENE] marker"
+);
 
 // STATE without [WORLD] must not extend the visible scene.
 const stateOnly = parseScene(

@@ -18,29 +18,44 @@ export function hasWorldMarker(raw: string): boolean {
   return /\[\s*WORLD\s*\]/i.test(raw);
 }
 
-export function parseScene(raw: string): ParsedScene {
+/** Pull visible scene prose from raw engine output (before token stripping). */
+function extractSceneText(raw: string): string {
   const sceneM = raw.match(/\[\s*SCENE\s*\]/i);
   const worldM = raw.match(/\[\s*WORLD\s*\]/i);
   const sceneIdx = sceneM ? (sceneM.index ?? -1) : -1;
   const worldIdx = worldM ? (worldM.index ?? -1) : -1;
 
-  let text: string;
-  if (sceneIdx !== -1) {
-    const start = sceneIdx + sceneM![0].length;
-    let end = worldIdx > sceneIdx ? worldIdx : raw.length;
-    // Model sometimes skips [WORLD] and jumps straight to STATE JSON.
-    if (worldIdx <= sceneIdx) {
-      const tail = raw.slice(start);
-      const stateM = tail.match(/\n\s*STATE\s*\n/i);
-      if (stateM && stateM.index !== undefined) {
-        end = start + stateM.index;
-      }
-    }
-    text = raw.slice(start, end);
+  const start = sceneIdx !== -1 ? sceneIdx + sceneM![0].length : 0;
+
+  let end = raw.length;
+  if (worldIdx !== -1 && worldIdx > start) {
+    end = worldIdx;
   } else {
-    // Never surface the raw stream buffer — wait for [SCENE] or show nothing.
-    text = "";
+    const tail = raw.slice(start);
+    const stateM = tail.match(/\n\s*STATE\s*\n/i);
+    if (stateM && stateM.index !== undefined) {
+      end = start + stateM.index;
+    } else {
+      const jsonLeak = tail.search(/\n\s*\{[\s\S]*?"world_type"/i);
+      if (jsonLeak !== -1) end = start + jsonLeak;
+    }
   }
+
+  const text = raw.slice(start, end);
+  if (looksLikeStateJson(text)) return "";
+  return text;
+}
+
+function looksLikeStateJson(text: string): boolean {
+  const t = text.trim();
+  return (
+    t.startsWith("{") &&
+    /"world_type"|"player_location"|"locations"/.test(t)
+  );
+}
+
+export function parseScene(raw: string): ParsedScene {
+  let text = extractSceneText(raw);
 
   let diverged = false;
   if (text.includes(DIVERGE_TOKEN)) {
