@@ -18,6 +18,7 @@ import {
   loadSession,
   saveSession,
 } from "@/lib/save";
+import DebugPanel from "@/components/DebugPanel";
 
 const MAX_INPUT = 90;
 const MAX_CHECKPOINTS = 20;
@@ -74,6 +75,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const [endLabel, setEndLabel] = useState<string | null>(null);
   const [worldReady, setWorldReady] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugTick, setDebugTick] = useState(0);
 
   const historyRef = useRef<Turn[]>([]);
   const checkpointsRef = useRef<Checkpoint[]>([]);
@@ -677,6 +680,18 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
             <a className="restart" href="/patch-notes" style={{ marginLeft: 12 }}>
               patch notes
             </a>
+            <button
+              className="restart"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDebugTick((n) => n + 1);
+                setDebugOpen(true);
+              }}
+              style={{ marginLeft: 12 }}
+              type="button"
+            >
+              debug
+            </button>
             {!ended && (
               <button
                 className="restart"
@@ -690,6 +705,24 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
           </span>
         </div>
       </div>
+
+      <DebugPanel
+        key={debugTick}
+        open={debugOpen}
+        onClose={() => setDebugOpen(false)}
+        history={historyRef.current.map((t) => ({ ...t }))}
+        meta={{
+          seedCode: seedRef.current,
+          turnCount: historyRef.current.filter((t) => t.role === "user").length,
+          assistantTurns: historyRef.current.filter(
+            (t) => t.role === "assistant"
+          ).length,
+          ended,
+          softEnded,
+          endLabel,
+          worldReady,
+        }}
+      />
     </div>
   );
 }
