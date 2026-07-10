@@ -372,12 +372,12 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   );
 
   const boot = useCallback(async () => {
-    let engineLine = "REALITY ENGINE v4.1  //  ONLINE";
+    let engineLine = "REALITY ENGINE v4.2  //  ONLINE";
     try {
       const res = await fetch("/api/engine");
       if (res.ok) {
         const data = await res.json();
-        const ver = data.version ?? "v4.1";
+        const ver = data.version ?? "v4.2";
         const banner = data.banner ?? "ONLINE";
         engineLine = `REALITY ENGINE ${ver}  //  ${banner}`;
       }

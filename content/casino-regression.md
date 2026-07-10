@@ -1,6 +1,6 @@
 # Casino playtest regression (YAN-259)
 
-Manual / eval checklist for engine **v4.1**. Replaying a flooded-casino-style path must show interlocking systems — not isolated prompt rules.
+Manual / eval checklist for engine **v4.2**. Replaying a flooded-casino-style path must show interlocking systems — not isolated prompt rules.
 
 ## Setup
 
@@ -21,7 +21,8 @@ Start a new world. Prefer a grounded urban/casino-like seed, or force via play u
 ## Sign-off
 
 - [ ] Manual playtest passed against this list
-- [ ] Engine version banner shows v4.1
+- [ ] Engine version banner shows v4.2
+- [ ] Opening line is character-POV only (no omniscient geography spoilers)
 - [ ] Local save resumes a soft-ended session with input unlocked
 
 Blocks marking YAN-255 / M7 complete.

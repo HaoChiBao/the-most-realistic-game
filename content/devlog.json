@@ -1,5 +1,20 @@
 [
   {
+    "id": "2026-07-10-character-pov",
+    "version": "0.4.2",
+    "engine": "v4.2",
+    "date": "2026-07-10",
+    "title": "Opening lines stay in character POV",
+    "summary": "Wake-up scenes only say what you could notice on the spot — hidden geography and plot truth stay in STATE until you discover them.",
+    "tags": ["engine", "gameplay"],
+    "changes": [
+      "Opening: YOU WAKE UP IN [immediate place] only — no 'buried under a city' spoilers",
+      "Hedge uncertain impressions (seemingly abandoned) instead of omniscient labels",
+      "Character-POV rule applies to all [SCENE] text, not just the opening",
+      "Engine version bump to v4.2"
+    ]
+  },
+  {
     "id": "2026-07-10-starting-plot",
     "version": "0.4.1",
     "engine": "v4.1",
