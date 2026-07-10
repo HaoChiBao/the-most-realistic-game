@@ -208,6 +208,14 @@ function buildConstraints(spec: {
   c.push(`Seed exactly ${spec.law_count} entries in laws[] (rule density: ${spec.labels.rule_density}).`);
   c.push(`Consequence stickiness: ${spec.labels.consequence_stickiness}. Breaches leave lasting STATE changes.`);
   c.push(`Tone: ${spec.labels.tone}. Never break world_type ceiling.`);
+  if (spec.world_type === "grounded") {
+    c.push(
+      "SETTING BIAS: contemporary normal life — street, forest, motel, apartment, parking lot, beach, highway shoulder, store, office, alley. No fairy tale, magic, dream logic, or cosmic weirdness."
+    );
+    c.push(
+      "OPENING: plain place name only (e.g. YOU WAKE UP IN A FOREST / ON THE SIDE OF THE STREET). Mundane beats poetic."
+    );
+  }
   c.push("Digits are NOT a plot genre. starting_plot is a seed tension the player may ignore — not a railroad.");
   c.push("Chill exploration is first-class. Dials set baseline society/physics, not mandatory crisis every turn.");
   c.push("Character POV: opening and SCENE only what a disoriented person would notice.");

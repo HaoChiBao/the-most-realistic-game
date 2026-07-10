@@ -62,7 +62,7 @@ export function composeRaw(opening: string, world: string): string {
 // "YOU WAKE UP IN A FERRY AT NIGHT." -> "a ferry at night".
 export function deriveSetting(opening: string): string {
   const one = opening.replace(/\s+/g, " ").trim();
-  const m = one.match(/wake up in\s+(.*)/i);
+  const m = one.match(/wake up (?:in|on)\s+(.*)/i);
   let label = (m ? m[1] : one).trim();
   label = label.replace(/[.!]+\s*$/, "");
   if (label.length > 90) label = label.slice(0, 87).trimEnd() + "...";
@@ -75,12 +75,39 @@ export function deriveSetting(opening: string): string {
 // Stored turn-1 bible remains exact share truth on load.
 
 // 14-digit seed: 10 dials + 4-digit instance ID. First dial digit is never zero.
-export function makeSeedCode(): string {
-  const first = 1 + Math.floor(Math.random() * 9);
-  let dials = `${first}`;
-  for (let i = 1; i < SEED_DIGIT_COUNT; i++) {
-    dials += Math.floor(Math.random() * 10);
+// Dials are weighted toward grounded, contemporary, street-level worlds (GTA-ish).
+
+function weightedPick(weights: readonly number[]): number {
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  let roll = Math.random() * total;
+  for (let i = 0; i < weights.length; i++) {
+    roll -= weights[i];
+    if (roll < 0) return i;
   }
+  return weights.length - 1;
+}
+
+/** Ten dial digits biased toward normal contemporary settings. */
+export function makeDialDigits(): number[] {
+  const digits = [
+    weightedPick([3, 12, 12, 10, 5, 4, 3, 2, 1, 1]), // D1 world_type — ~77% grounded
+    weightedPick([2, 4, 8, 10, 10, 8, 6, 4, 2, 1]), // D2 place — building / block / street
+    weightedPick([4, 7, 8, 8, 7, 5, 3, 2, 1, 1]), // D3 isolation — public to sparse
+    weightedPick([3, 5, 7, 8, 7, 5, 4, 3, 2, 1]), // D4 law — everyday norms
+    weightedPick([4, 6, 7, 7, 6, 5, 4, 3, 2, 1]), // D5 opacity
+    weightedPick([3, 5, 7, 8, 7, 5, 4, 3, 2, 1]), // D6 npc agency
+    weightedPick([4, 6, 7, 7, 6, 5, 3, 2, 1, 1]), // D7 scarcity — not desperate
+    weightedPick([5, 6, 7, 6, 5, 4, 3, 2, 1, 1]), // D8 rule density
+    weightedPick([4, 6, 7, 6, 5, 4, 3, 2, 1, 1]), // D9 stickiness
+    weightedPick([10, 9, 8, 7, 5, 3, 2, 1, 1, 1]), // D10 tone — dry / realist
+  ];
+  // Position 1 is never 0 in share codes; remap to grounded 1–3.
+  if (digits[0] === 0) digits[0] = 1 + Math.floor(Math.random() * 3);
+  return digits;
+}
+
+export function makeSeedCode(): string {
+  const dials = makeDialDigits().join("");
   let instanceId = "";
   for (let i = 0; i < SEED_INSTANCE_ID_LENGTH; i++) {
     instanceId += Math.floor(Math.random() * 10);

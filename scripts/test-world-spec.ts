@@ -5,7 +5,7 @@ import {
   formatWorldSpecForPrompt,
   parseSeedCode,
 } from "../lib/worldSpec";
-import { isValidCode, makeSeedCode } from "../lib/seed";
+import { isValidCode, makeDialDigits, makeSeedCode } from "../lib/seed";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -38,6 +38,14 @@ assert(decodeSeed("123") === null, "reject too short");
 const made = makeSeedCode();
 assert(isValidCode(made), "makeSeedCode valid");
 assert(made.length === 14, "new codes are 14 digits");
+assert(made[0] !== "0", "first dial never zero");
+
+let groundedCount = 0;
+for (let i = 0; i < 200; i++) {
+  const d1 = makeDialDigits()[0];
+  if (d1 <= 3) groundedCount += 1;
+}
+assert(groundedCount >= 120, "dial bias favors grounded worlds");
 
 const table = formatDialTableForDebug(spec!);
 assert(table.includes("INSTANCE ID"), "dial table shows instance id");

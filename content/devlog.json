@@ -1,5 +1,22 @@
 [
   {
+    "id": "2026-07-10-grounded-open",
+    "version": "0.5.5",
+    "engine": "v5.4",
+    "date": "2026-07-10",
+    "title": "Grounded GTA-style worlds & plain openings",
+    "summary": "Seed dials bias toward contemporary normal settings. Openings use simple place names — forest, street, motel — not fairy tale prose.",
+    "tags": ["engine", "seeds", "gameplay"],
+    "changes": [
+      "Weighted seed dials: ~77% grounded world_type, street-level place grain, low tone",
+      "Prompt: NORMAL WORLD DEFAULT — GTA-style open-world energy, mundane locations",
+      "Openings: YOU WAKE UP IN/ON [SIMPLE PLACE] — no magic, no lore dump",
+      "WorldSpec constraints reinforce contemporary settings when grounded",
+      "Typing sound stops when display catches up; syncing label while hidden STATE streams",
+      "Engine version bump to v5.4"
+    ]
+  },
+  {
     "id": "2026-07-10-typing-sfx",
     "version": "0.5.4",
     "engine": "v5.3",

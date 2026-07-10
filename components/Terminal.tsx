@@ -75,6 +75,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [worldSyncing, setWorldSyncing] = useState(false);
   const [booted, setBooted] = useState(false);
   const [ended, setEnded] = useState(false);
   const [softEnded, setSoftEnded] = useState(false);
@@ -218,6 +219,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const streamTurn = useCallback(async () => {
     const myRun = runIdRef.current;
     setBusy(true);
+    setWorldSyncing(false);
     const engineId = addEntry("engine", "");
 
     let received = "";
@@ -234,11 +236,25 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     let raf = 0;
     let finished = false;
     let soundStarted = false;
+    let syncingShown = false;
+
+    const setSyncing = (on: boolean) => {
+      if (syncingShown === on) return;
+      syncingShown = on;
+      if (myRun === runIdRef.current) setWorldSyncing(on);
+    };
+
+    const pauseTypingSound = () => {
+      if (!soundStarted) return;
+      soundStarted = false;
+      stopTypingSound();
+    };
 
     const finish = () => {
       if (finished || myRun !== runIdRef.current) return;
       finished = true;
-      stopTypingSound();
+      pauseTypingSound();
+      setSyncing(false);
       const cleanScene = received.trim();
       setEntryText(engineId, cleanScene);
 
@@ -286,16 +302,27 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       acc += ((ts - last) / 1000) * TYPE_CPS;
       last = ts;
       const reveal = Math.floor(acc);
-      if (reveal > 0 && shown < received.length) {
+      const hasMoreToShow = shown < received.length;
+
+      if (reveal > 0 && hasMoreToShow) {
         acc -= reveal;
         shown = Math.min(received.length, shown + reveal);
-        if (!soundStarted && shown > 0) {
+        if (!soundStarted) {
           soundStarted = true;
           startTypingSound();
         }
+        setSyncing(false);
         setEntryText(engineId, received.slice(0, shown).trimStart());
         scrollToBottom();
+      } else if (soundStarted && !hasMoreToShow) {
+        // Scene caught up — LLM may still be streaming hidden [WORLD] STATE.
+        pauseTypingSound();
       }
+
+      if (!streamDone && !hasMoreToShow && received.length > 0) {
+        setSyncing(true);
+      }
+
       if (streamDone && shown >= received.length) {
         finish();
         return;
@@ -315,7 +342,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
 
       if (!res.ok || !res.body) {
         if (myRun !== runIdRef.current) return;
-        stopTypingSound();
+        pauseTypingSound();
+        setSyncing(false);
         const detail = await res.text().catch(() => "");
         setEntries((prev) => prev.filter((e) => e.id !== engineId));
         addEntry("error", detail || `ENGINE ERROR [${res.status}].`);
@@ -348,7 +376,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       streamDone = true;
     } catch (err) {
       cancelAnimationFrame(raf);
-      stopTypingSound();
+      pauseTypingSound();
+      setSyncing(false);
       if (!finished && myRun === runIdRef.current) {
         setEntries((prev) => prev.filter((e) => e.id !== engineId));
         addEntry("error", `SIGNAL LOST. ${String(err)}`);
@@ -416,6 +445,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     setEntries([]);
     setInput("");
     setBusy(false);
+    setWorldSyncing(false);
     setBooted(false);
     setEnded(false);
     setSoftEnded(false);
@@ -429,12 +459,12 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     const myRun = runIdRef.current;
     const stillActive = () => myRun === runIdRef.current;
 
-    let engineLine = "REALITY ENGINE v5.3  //  ONLINE";
+    let engineLine = "REALITY ENGINE v5.4  //  ONLINE";
     try {
       const res = await fetch("/api/engine");
       if (res.ok) {
         const data = await res.json();
-        const ver = data.version ?? "v5.3";
+        const ver = data.version ?? "v5.4";
         const banner = data.banner ?? "ONLINE";
         engineLine = `REALITY ENGINE ${ver}  //  ${banner}`;
       }
@@ -667,7 +697,9 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const placeholderText = !booted
     ? "loading the world... you can start typing"
     : busy
-    ? "type your next move... it sends when the world settles"
+    ? worldSyncing
+      ? "syncing world state... almost ready"
+      : "type your next move... it sends when the world settles"
     : softEnded
     ? "the world continues — what do you do?"
     : "what do you do?";
@@ -727,7 +759,11 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
               spellCheck={false}
               aria-label="game input"
             />
-            {sendLocked && <span className="send-lock">loading</span>}
+            {sendLocked && (
+              <span className="send-lock">
+                {worldSyncing ? "syncing" : "loading"}
+              </span>
+            )}
           </form>
         )}
 
