@@ -1,5 +1,20 @@
 [
   {
+    "id": "2026-07-10-abstract-open",
+    "version": "0.5.6",
+    "engine": "v5.5",
+    "date": "2026-07-10",
+    "title": "Abstract wake-up lines",
+    "summary": "Openings are generic place labels only — no sensory detail until the player acts.",
+    "tags": ["engine", "gameplay"],
+    "changes": [
+      "Opening: YOU WAKE UP IN/ON [GENERIC PLACE] — no adjectives, lighting, materials, mood",
+      "Bad example blocked: dimly lit cramped quarters with metal walls",
+      "Full sensory truth lives in STATE; revealed when player looks, moves, or asks",
+      "Engine version bump to v5.5"
+    ]
+  },
+  {
     "id": "2026-07-10-grounded-open",
     "version": "0.5.5",
     "engine": "v5.4",

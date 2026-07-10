@@ -459,12 +459,12 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     const myRun = runIdRef.current;
     const stillActive = () => myRun === runIdRef.current;
 
-    let engineLine = "REALITY ENGINE v5.4  //  ONLINE";
+    let engineLine = "REALITY ENGINE v5.5  //  ONLINE";
     try {
       const res = await fetch("/api/engine");
       if (res.ok) {
         const data = await res.json();
-        const ver = data.version ?? "v5.4";
+        const ver = data.version ?? "v5.5";
         const banner = data.banner ?? "ONLINE";
         engineLine = `REALITY ENGINE ${ver}  //  ${banner}`;
       }
