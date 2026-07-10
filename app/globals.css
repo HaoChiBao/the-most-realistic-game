@@ -127,6 +127,7 @@ body {
 .entry.system {
   color: var(--phosphor-dim);
   opacity: 0.75;
+  text-align: center;
 }
 
 .entry.error {
@@ -140,6 +141,7 @@ body {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   font-size: clamp(12px, 1.8vmin, 15px);
+  text-align: center;
 }
 
 .entry.diverge::before {

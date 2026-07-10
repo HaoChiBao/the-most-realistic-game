@@ -87,7 +87,22 @@ export function parseScene(raw: string): ParsedScene {
   // Hard end wins if both somehow appear.
   if (ended) softEnded = false;
 
+  text = sanitizeSceneMeta(text);
+
   return { scene: text.trim(), ended, softEnded, diverged, endLabel };
+}
+
+/** Remove leaked server injections and engine meta from visible scene. */
+export function sanitizeSceneMeta(text: string): string {
+  return text
+    .replace(/\[\s*COMBAT\s+ESCALATION[\s\S]*?\]/gi, "")
+    .replace(/\[\s*AUTHORITY\s+RESPONSE[\s\S]*?\]/gi, "")
+    .replace(/\[\s*LETHAL\s+CONSEQUENCE[\s\S]*?\]/gi, "")
+    .replace(/\[\s*DETENTION\s+TIMER[\s\S]*?\]/gi, "")
+    .replace(/\[\s*RANDOMNESS[\s\S]*?\]/gi, "")
+    .replace(/\[SCENE\s+continues[^\]]*\]/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 // Strip control tokens before storing assistant turns in history.

@@ -1,5 +1,22 @@
 [
   {
+    "id": "2026-07-10-immediate-consequences",
+    "version": "0.6.0",
+    "engine": "v5.8",
+    "date": "2026-07-10",
+    "significance": 92,
+    "title": "Immediate consequences & lethal rash-action tolerance",
+    "summary": "Attack a cop → instant cuff + backup. Grab or shoot the gun → death. Waiting while detained forces backup arrival. System/diverge banners centered.",
+    "tags": ["engine", "gameplay", "combat", "ux"],
+    "changes": [
+      "Server injections: AUTHORITY RESPONSE (1st assault), LETHAL CONSEQUENCE (gun/shoot/burn), DETENTION TIMER (wait stasis)",
+      "Backup must arrive within 1-2 turns; no 10-turn arrest loops",
+      "Strip leaked [COMBAT ESCALATION] and [SCENE continues] from visible text",
+      "System and diverge log entries centered in terminal",
+      "Engine version bump to v5.8"
+    ]
+  },
+  {
     "id": "2026-07-10-combat-escalation",
     "version": "0.5.9",
     "engine": "v5.7",

@@ -26,7 +26,7 @@ import {
   formatRandomnessGuide,
   formatRollOverview,
 } from "@/lib/randomness";
-import { resolveCombatEscalation } from "@/lib/combatContext";
+import { resolveActionConsequence } from "@/lib/actionConsequence";
 import { resolveRollForHistory } from "@/lib/rollContext";
 import {
   extractSceneBlock,
@@ -214,7 +214,7 @@ export function buildDebugSections(opts: {
   });
 
   const pendingRoll = resolveRollForHistory(history, seedCode);
-  const pendingCombat = resolveCombatEscalation(history);
+  const pendingConsequence = resolveActionConsequence(history);
   sections.push({
     id: "random-roll",
     title: seedDialTable ? "10 · Random roll (next turn)" : "08 · Random roll (next turn)",
@@ -225,19 +225,19 @@ export function buildDebugSections(opts: {
   });
 
   sections.push({
-    id: "combat-escalation",
-    title: seedDialTable ? "11 · Combat escalation (next turn)" : "09 · Combat escalation (next turn)",
+    id: "action-consequence",
+    title: seedDialTable ? "11 · Action consequence (next turn)" : "09 · Action consequence (next turn)",
     kind: "text",
-    body: pendingCombat?.fired
-      ? `FIRED — attack_streak=${pendingCombat.attack_streak} passive_last=${pendingCombat.passive_last_scene}\ntarget=${pendingCombat.target_npc_name} (${pendingCombat.target_npc_id}) combat ${pendingCombat.npc_combat} vs player ${pendingCombat.player_combat}\n\n--- prompt block ---\n${pendingCombat.prompt_block}`
-      : "(not active — fires during sustained assault vs passive NPC narration)",
+    body: pendingConsequence?.fired
+      ? `FIRED [${pendingConsequence.kind}]\n${JSON.stringify(pendingConsequence.debug ?? {}, null, 2)}\n\n--- prompt block ---\n${pendingConsequence.prompt_block}`
+      : "(not active — fires on authority assault, lethal rash acts, combat loops, or detention stasis)",
   });
 
   const payloadMessages = buildGameMessages(
     history,
     seedCode,
     pendingRoll,
-    pendingCombat
+    pendingConsequence
   );
   const payloadNotes = annotateGameMessages(payloadMessages);
   sections.push({

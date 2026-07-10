@@ -1,6 +1,6 @@
 import { OPENING_INSTRUCTION, SYSTEM_PROMPT } from "@/lib/systemPrompt";
 import type { RandomRollResult } from "@/lib/randomness";
-import type { CombatEscalationResult } from "@/lib/combatContext";
+import type { ActionConsequenceResult } from "@/lib/actionConsequence";
 import { buildOpeningInstruction, decodeSeed } from "@/lib/worldSpec";
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
@@ -21,7 +21,7 @@ export function buildGameMessages(
   history: ClientTurn[],
   seedCode?: string | null,
   roll?: RandomRollResult | null,
-  combat?: CombatEscalationResult | null
+  consequence?: ActionConsequenceResult | null
 ): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
 
@@ -51,7 +51,7 @@ export function buildGameMessages(
       trimmed[trimmed.length - 1]?.role === "user"
     ) {
       const injections: string[] = [];
-      if (combat?.fired) injections.push(combat.prompt_block);
+      if (consequence?.fired) injections.push(consequence.prompt_block);
       if (roll) injections.push(roll.prompt_block);
       if (injections.length > 0) {
         content = `${content}\n\n${injections.join("\n\n")}`;

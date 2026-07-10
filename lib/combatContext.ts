@@ -123,7 +123,12 @@ export function resolveCombatEscalation(
       COMBAT_POSTURES.has(npc.combat_posture) ||
       /guard|officer|cop|security|bouncer/i.test(npc.role));
 
+  const isAuthority =
+    !!npc && /officer|cop|police|deputy|sheriff|security|guard/i.test(npc.role);
+
   const shouldFire =
+    (isAuthority && attackStreak >= 2 && (isAttack || isTaunt)) ||
+    (isAuthority && isAttack && attackStreak >= 1 && passiveLastScene) ||
     attackStreak >= 3 ||
     (attackStreak >= 2 && (isAttack || isTaunt)) ||
     (attackStreak >= 1 && passiveLastScene && (isAttack || isTaunt)) ||
