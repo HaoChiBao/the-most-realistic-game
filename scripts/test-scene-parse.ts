@@ -1,4 +1,4 @@
-import { parseScene, stripControlTokens } from "../lib/sceneParse";
+import { hasWorldMarker, parseScene, stripControlTokens } from "../lib/sceneParse";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -24,9 +24,22 @@ const both = parseScene(
 );
 assert(both.ended === true && both.softEnded === false, "hard wins over soft");
 
-const diverge = parseScene("[SCENE]\n<DIVERGE>Something shifts.\n[WORLD]\nz");
+const diverge = parseScene("[SCENE]\nx<DIVERGE><SOFT_END><END><ENDLABEL>L</ENDLABEL>\n[WORLD]\ny");
 assert(diverge.diverged === true, "diverge detected");
 assert(!diverge.scene.includes("DIVERGE"), "diverge token stripped");
+
+// No [SCENE] marker — never leak the raw stream buffer (e.g. STATE JSON).
+const noMarker = parseScene('{"world_type":"grounded","player_location":"x"}');
+assert(noMarker.scene === "", "no scene without [SCENE] marker");
+
+// STATE without [WORLD] must not extend the visible scene.
+const stateOnly = parseScene(
+  "[SCENE]\nYou stand in rain.\nSTATE\n{\"world_type\":\"grounded\"}"
+);
+assert(stateOnly.scene === "You stand in rain.", "truncate at STATE line");
+
+assert(hasWorldMarker("[SCENE]\na\n[WORLD]\nSTATE\n{}") === true, "world marker");
+assert(hasWorldMarker("[SCENE]\nonly scene") === false, "no world marker");
 
 const cleaned = stripControlTokens(
   "[SCENE]\na<DIVERGE><SOFT_END><END><ENDLABEL>L</ENDLABEL>\n[WORLD]\nb"

@@ -13,6 +13,11 @@ export type ParsedScene = {
   endLabel: string | null;
 };
 
+/** True once the stream has entered the hidden [WORLD] block. */
+export function hasWorldMarker(raw: string): boolean {
+  return /\[\s*WORLD\s*\]/i.test(raw);
+}
+
 export function parseScene(raw: string): ParsedScene {
   const sceneM = raw.match(/\[\s*SCENE\s*\]/i);
   const worldM = raw.match(/\[\s*WORLD\s*\]/i);
@@ -22,12 +27,19 @@ export function parseScene(raw: string): ParsedScene {
   let text: string;
   if (sceneIdx !== -1) {
     const start = sceneIdx + sceneM![0].length;
-    const end = worldIdx > sceneIdx ? worldIdx : raw.length;
+    let end = worldIdx > sceneIdx ? worldIdx : raw.length;
+    // Model sometimes skips [WORLD] and jumps straight to STATE JSON.
+    if (worldIdx <= sceneIdx) {
+      const tail = raw.slice(start);
+      const stateM = tail.match(/\n\s*STATE\s*\n/i);
+      if (stateM && stateM.index !== undefined) {
+        end = start + stateM.index;
+      }
+    }
     text = raw.slice(start, end);
-  } else if (worldIdx !== -1) {
-    text = raw.slice(0, worldIdx);
   } else {
-    text = raw.length > 24 ? raw : "";
+    // Never surface the raw stream buffer — wait for [SCENE] or show nothing.
+    text = "";
   }
 
   let diverged = false;

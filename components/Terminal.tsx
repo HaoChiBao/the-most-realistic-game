@@ -8,6 +8,7 @@ import {
   type FormEvent,
 } from "react";
 import {
+  hasWorldMarker,
   parseScene,
   stripControlTokens,
 } from "@/lib/sceneParse";
@@ -24,6 +25,7 @@ import {
   preloadTypingSound,
   startTypingSound,
   stopTypingSound,
+  syncTypingSound,
 } from "@/lib/typingSound";
 
 const MAX_INPUT = 90;
@@ -235,8 +237,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     let last = 0;
     let raf = 0;
     let finished = false;
-    let soundStarted = false;
     let syncingShown = false;
+    let lockedScene: string | null = null;
 
     const setSyncing = (on: boolean) => {
       if (syncingShown === on) return;
@@ -244,16 +246,10 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       if (myRun === runIdRef.current) setWorldSyncing(on);
     };
 
-    const pauseTypingSound = () => {
-      if (!soundStarted) return;
-      soundStarted = false;
-      stopTypingSound();
-    };
-
     const finish = () => {
       if (finished || myRun !== runIdRef.current) return;
       finished = true;
-      pauseTypingSound();
+      syncTypingSound(false);
       setSyncing(false);
       const cleanScene = received.trim();
       setEntryText(engineId, cleanScene);
@@ -307,17 +303,13 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       if (reveal > 0 && hasMoreToShow) {
         acc -= reveal;
         shown = Math.min(received.length, shown + reveal);
-        if (!soundStarted) {
-          soundStarted = true;
-          startTypingSound();
-        }
         setSyncing(false);
-        setEntryText(engineId, received.slice(0, shown).trimStart());
+        setEntryText(engineId, received.slice(0, shown));
         scrollToBottom();
-      } else if (soundStarted && !hasMoreToShow) {
-        // Scene caught up — LLM may still be streaming hidden [WORLD] STATE.
-        pauseTypingSound();
       }
+
+      // Sound tracks visible reveal only — not hidden [WORLD] / STATE streaming.
+      syncTypingSound(hasMoreToShow && !finished);
 
       if (!streamDone && !hasMoreToShow && received.length > 0) {
         setSyncing(true);
@@ -342,7 +334,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
 
       if (!res.ok || !res.body) {
         if (myRun !== runIdRef.current) return;
-        pauseTypingSound();
+        syncTypingSound(false);
         setSyncing(false);
         const detail = await res.text().catch(() => "");
         setEntries((prev) => prev.filter((e) => e.id !== engineId));
@@ -361,8 +353,12 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         const { done, value } = await reader.read();
         if (done) break;
         rawFull += decoder.decode(value, { stream: true });
+        if (lockedScene === null && hasWorldMarker(rawFull)) {
+          lockedScene = parseScene(rawFull).scene;
+        }
         const parsed = parseScene(rawFull);
-        received = parsed.scene;
+        received = lockedScene ?? parsed.scene;
+        if (shown > received.length) shown = received.length;
         sawEnd = parsed.ended;
         sawSoftEnd = parsed.softEnded;
         if (parsed.diverged) sawDiverge = true;
@@ -376,7 +372,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       streamDone = true;
     } catch (err) {
       cancelAnimationFrame(raf);
-      pauseTypingSound();
+      syncTypingSound(false);
       setSyncing(false);
       if (!finished && myRun === runIdRef.current) {
         setEntries((prev) => prev.filter((e) => e.id !== engineId));

@@ -4,7 +4,7 @@ const SOUND_URL = "/sounds/response_typing_sound.wav";
 const VOLUME = 0.35;
 
 let audio: HTMLAudioElement | null = null;
-let activeSessions = 0;
+let playing = false;
 
 function getAudio(): HTMLAudioElement | null {
   if (typeof window === "undefined") return null;
@@ -22,22 +22,26 @@ export function preloadTypingSound(): void {
   getAudio();
 }
 
-export function startTypingSound(): void {
+/** Idempotent — safe to call every animation frame. */
+export function syncTypingSound(active: boolean): void {
+  if (active === playing) return;
+  playing = active;
   const el = getAudio();
   if (!el) return;
-  activeSessions += 1;
-  if (activeSessions === 1) {
+  if (active) {
     void el.play().catch(() => {
       // Autoplay policy may block until user gesture; ignore.
     });
+  } else {
+    el.pause();
+    el.currentTime = 0;
   }
 }
 
+export function startTypingSound(): void {
+  syncTypingSound(true);
+}
+
 export function stopTypingSound(): void {
-  if (activeSessions === 0) return;
-  activeSessions = Math.max(0, activeSessions - 1);
-  if (activeSessions === 0 && audio) {
-    audio.pause();
-    audio.currentTime = 0;
-  }
+  syncTypingSound(false);
 }
