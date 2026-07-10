@@ -26,6 +26,10 @@ import {
   extractStateJson,
   extractWorldBlock,
 } from "@/lib/stateParse";
+import {
+  formatSyncTimingTable,
+  type SyncTimingRecord,
+} from "@/lib/syncTiming";
 
 export { extractStateJson } from "@/lib/stateParse";
 
@@ -48,6 +52,7 @@ export type SessionDebugMeta = {
   softEnded: boolean;
   endLabel: string | null;
   worldReady: boolean;
+  syncTimings?: SyncTimingRecord[];
 };
 
 type Turn = { role: "user" | "assistant"; content: string };
@@ -110,8 +115,23 @@ export function buildDebugSections(opts: {
       endLabel: meta.endLabel,
       worldReady: meta.worldReady,
       historyLength: history.length,
+      syncTiming: meta.syncTimings?.length
+        ? {
+            lastTurn: meta.syncTimings[meta.syncTimings.length - 1],
+            turnCount: meta.syncTimings.length,
+          }
+        : null,
     }),
   });
+
+  if (meta.syncTimings && meta.syncTimings.length > 0) {
+    sections.push({
+      id: "sync-timing",
+      title: "Sync timing",
+      kind: "text",
+      body: formatSyncTimingTable(meta.syncTimings),
+    });
+  }
 
   if (seedDialTable) {
     sections.push({

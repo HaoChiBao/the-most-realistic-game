@@ -27,6 +27,10 @@ import {
   stopTypingSound,
   syncTypingSound,
 } from "@/lib/typingSound";
+import {
+  formatSyncWaitSec,
+  type SyncTimingRecord,
+} from "@/lib/syncTiming";
 
 const MAX_INPUT = 90;
 const MAX_CHECKPOINTS = 20;
@@ -78,6 +82,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [worldSyncing, setWorldSyncing] = useState(false);
+  const [lastSyncWaitSec, setLastSyncWaitSec] = useState<string | null>(null);
   const [booted, setBooted] = useState(false);
   const [ended, setEnded] = useState(false);
   const [softEnded, setSoftEnded] = useState(false);
@@ -88,6 +93,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const [debugTick, setDebugTick] = useState(0);
 
   const historyRef = useRef<Turn[]>([]);
+  const syncTimingsRef = useRef<SyncTimingRecord[]>([]);
   const checkpointsRef = useRef<Checkpoint[]>([]);
   const openingWorldRef = useRef<Turn | null>(null);
   const idRef = useRef(0);
@@ -222,7 +228,20 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     const myRun = runIdRef.current;
     setBusy(true);
     setWorldSyncing(false);
+    setLastSyncWaitSec(null);
     const engineId = addEntry("engine", "");
+
+    const turnStart = performance.now();
+    const turnNumber = historyRef.current.filter((t) => t.role === "user").length;
+    let lastUserAction: string | null = null;
+    for (let i = historyRef.current.length - 1; i >= 0; i--) {
+      if (historyRef.current[i].role === "user") {
+        lastUserAction = historyRef.current[i].content;
+        break;
+      }
+    }
+    let syncGapStart: number | null = null;
+    let sceneRevealedAt: number | null = null;
 
     let received = "";
     let rawFull = "";
@@ -249,6 +268,24 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     const finish = () => {
       if (finished || myRun !== runIdRef.current) return;
       finished = true;
+      const finishedAt = performance.now();
+      if (sceneRevealedAt === null && received.length > 0) {
+        sceneRevealedAt = finishedAt;
+      }
+      const record: SyncTimingRecord = {
+        turn: turnNumber,
+        userAction: lastUserAction,
+        sceneChars: received.trim().length,
+        typingMs: Math.round((sceneRevealedAt ?? finishedAt) - turnStart),
+        syncWaitMs: Math.round(
+          syncGapStart !== null ? finishedAt - syncGapStart : 0
+        ),
+        totalMs: Math.round(finishedAt - turnStart),
+      };
+      syncTimingsRef.current = [...syncTimingsRef.current, record].slice(-40);
+      if (record.syncWaitMs > 0) {
+        setLastSyncWaitSec(formatSyncWaitSec(record.syncWaitMs));
+      }
       syncTypingSound(false);
       setSyncing(false);
       const cleanScene = received.trim();
@@ -311,8 +348,19 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       // Sound tracks visible reveal only — not hidden [WORLD] / STATE streaming.
       syncTypingSound(hasMoreToShow && !finished);
 
-      if (!streamDone && !hasMoreToShow && received.length > 0) {
+      const sceneFullyShown =
+        received.length > 0 && shown >= received.length;
+      if (sceneFullyShown && sceneRevealedAt === null) {
+        sceneRevealedAt = ts;
+      }
+      if (sceneFullyShown && !streamDone && syncGapStart === null) {
+        syncGapStart = ts;
+      }
+
+      if (!streamDone && sceneFullyShown) {
         setSyncing(true);
+      } else if (!sceneFullyShown) {
+        setSyncing(false);
       }
 
       if (streamDone && shown >= received.length) {
@@ -428,6 +476,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     stopTypingSound();
     clearSession();
     historyRef.current = [];
+    syncTimingsRef.current = [];
     checkpointsRef.current = [];
     openingWorldRef.current = null;
     idRef.current = 0;
@@ -442,6 +491,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     setInput("");
     setBusy(false);
     setWorldSyncing(false);
+    setLastSyncWaitSec(null);
     setBooted(false);
     setEnded(false);
     setSoftEnded(false);
@@ -647,6 +697,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       return;
     }
     historyRef.current = [];
+    syncTimingsRef.current = [];
     checkpointsRef.current = [];
     setEntries([]);
     setInput("");
@@ -760,6 +811,11 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
                 {worldSyncing ? "syncing" : "loading"}
               </span>
             )}
+            {!sendLocked && lastSyncWaitSec && (
+              <span className="send-lock sync-done" aria-label="sync duration">
+                {lastSyncWaitSec}
+              </span>
+            )}
           </form>
         )}
 
@@ -854,6 +910,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
           softEnded,
           endLabel,
           worldReady,
+          syncTimings: syncTimingsRef.current,
         }}
       />
     </div>

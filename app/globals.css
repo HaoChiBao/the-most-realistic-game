@@ -212,6 +212,13 @@ body {
   animation: blink 1.2s steps(1) infinite;
 }
 
+.send-lock.sync-done {
+  animation: none;
+  opacity: 0.85;
+  letter-spacing: 0.08em;
+  text-transform: none;
+}
+
 .end-prompt {
   flex-wrap: wrap;
   gap: 8px;
