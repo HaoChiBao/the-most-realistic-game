@@ -86,6 +86,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const startedRef = useRef(false);
+  const runIdRef = useRef(0);
   const seedRef = useRef<string | null>(seedCode ?? null);
   const seedSavedRef = useRef(Boolean(seedCode));
   const entriesRef = useRef<Entry[]>([]);
@@ -208,6 +209,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   );
 
   const streamTurn = useCallback(async () => {
+    const myRun = runIdRef.current;
     setBusy(true);
     const engineId = addEntry("engine", "");
 
@@ -226,7 +228,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     let finished = false;
 
     const finish = () => {
-      if (finished) return;
+      if (finished || myRun !== runIdRef.current) return;
       finished = true;
       const cleanScene = received.trim();
       setEntryText(engineId, cleanScene);
@@ -299,6 +301,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       });
 
       if (!res.ok || !res.body) {
+        if (myRun !== runIdRef.current) return;
         const detail = await res.text().catch(() => "");
         setEntries((prev) => prev.filter((e) => e.id !== engineId));
         addEntry("error", detail || `ENGINE ERROR [${res.status}].`);
@@ -331,7 +334,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       streamDone = true;
     } catch (err) {
       cancelAnimationFrame(raf);
-      if (!finished) {
+      if (!finished && myRun === runIdRef.current) {
         setEntries((prev) => prev.filter((e) => e.id !== engineId));
         addEntry("error", `SIGNAL LOST. ${String(err)}`);
         setBusy(false);
@@ -342,11 +345,13 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
 
   const loadSeed = useCallback(
     async (code: string) => {
+      const myRun = runIdRef.current;
       setBusy(true);
       try {
         const res = await fetch(`/api/seed/${code}`);
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.opening || !data.world) {
+          if (myRun !== runIdRef.current) return;
           addEntry(
             "error",
             data.error || `NO WORLD FOUND FOR SEED ${code}. Generating a new one.`
@@ -355,6 +360,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
           await streamTurn();
           return;
         }
+        if (myRun !== runIdRef.current) return;
         const raw = composeRaw(data.opening, data.world);
         const turn: Turn = { role: "assistant", content: raw };
         historyRef.current.push(turn);
@@ -368,6 +374,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         focusInput();
         persistSession();
       } catch (err) {
+        if (myRun !== runIdRef.current) return;
         addEntry("error", `COULD NOT LOAD SEED. ${String(err)}`);
         setBusy(false);
         await streamTurn();
@@ -376,7 +383,36 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     [addEntry, revealText, streamTurn, focusInput, persistSession]
   );
 
-  const boot = useCallback(async () => {
+  const resetForNewWorld = useCallback(() => {
+    runIdRef.current += 1;
+    clearSession();
+    historyRef.current = [];
+    checkpointsRef.current = [];
+    openingWorldRef.current = null;
+    idRef.current = 0;
+    seedRef.current = null;
+    seedSavedRef.current = false;
+    entriesRef.current = [];
+    endedRef.current = false;
+    softEndedRef.current = false;
+    endLabelRef.current = null;
+    worldReadyRef.current = false;
+    setEntries([]);
+    setInput("");
+    setBusy(false);
+    setBooted(false);
+    setEnded(false);
+    setSoftEnded(false);
+    setEndLabel(null);
+    setWorldReady(false);
+    setSharing(false);
+    setDebugOpen(false);
+  }, []);
+
+  const beginFreshWorld = useCallback(async () => {
+    const myRun = runIdRef.current;
+    const stillActive = () => myRun === runIdRef.current;
+
     let engineLine = "REALITY ENGINE v5.1  //  ONLINE";
     try {
       const res = await fetch("/api/engine");
@@ -390,6 +426,33 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       // keep default line
     }
 
+    if (!stillActive()) return;
+
+    const lines = seedCode
+      ? [engineLine, ...BOOT_LINES_SEED_BASE]
+      : [engineLine, ...BOOT_LINES_BASE];
+    for (const line of lines) {
+      if (!stillActive()) return;
+      addEntry("system", line);
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, 90));
+    }
+    if (!stillActive()) return;
+    setBooted(true);
+    if (seedCode) {
+      seedRef.current = seedCode;
+      seedSavedRef.current = true;
+      await loadSeed(seedCode);
+    } else {
+      if (!seedRef.current) {
+        seedRef.current = makeSeedCode();
+        seedSavedRef.current = false;
+      }
+      await streamTurn();
+    }
+  }, [addEntry, streamTurn, loadSeed, seedCode]);
+
+  const boot = useCallback(async () => {
     const saved = loadSession();
     if (saved && canRestoreSession(saved, seedCode)) {
       historyRef.current = saved.history.map((t) => ({ ...t }));
@@ -435,28 +498,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       clearSession();
     }
 
-    const lines = seedCode
-      ? [engineLine, ...BOOT_LINES_SEED_BASE]
-      : [engineLine, ...BOOT_LINES_BASE];
-    for (const line of lines) {
-      addEntry("system", line);
-      // eslint-disable-next-line no-await-in-loop
-      await new Promise((r) => setTimeout(r, 90));
-    }
-    setBooted(true);
-    if (seedCode) {
-      seedRef.current = seedCode;
-      seedSavedRef.current = true;
-      await loadSeed(seedCode);
-    } else {
-      // Allocate dial code before first generation so digits bias WORLDSPEC.
-      if (!seedRef.current) {
-        seedRef.current = makeSeedCode();
-        seedSavedRef.current = false;
-      }
-      await streamTurn();
-    }
-  }, [addEntry, streamTurn, loadSeed, seedCode, focusInput]);
+    await beginFreshWorld();
+  }, [seedCode, focusInput, streamTurn, beginFreshWorld]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -535,10 +578,14 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   }, [busy, sharing, worldReady, addEntry, persistSession]);
 
   const newWorld = useCallback(() => {
-    if (busy) return;
-    clearSession();
-    if (typeof window !== "undefined") window.location.assign("/");
-  }, [busy]);
+    if (seedCode) {
+      clearSession();
+      window.location.assign("/");
+      return;
+    }
+    resetForNewWorld();
+    void beginFreshWorld();
+  }, [seedCode, resetForNewWorld, beginFreshWorld]);
 
   const retryWorld = useCallback(() => {
     if (busy) return;
@@ -639,7 +686,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
               <button className="restart" onClick={retryWorld} disabled={busy}>
                 [ retry this world ]
               </button>
-              <button className="restart" onClick={newWorld} disabled={busy}>
+              <button className="restart" onClick={newWorld}>
                 [ new world ]
               </button>
             </span>
@@ -724,7 +771,6 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
               <button
                 className="restart"
                 onClick={newWorld}
-                disabled={busy}
                 style={{ marginLeft: 12 }}
               >
                 new world
