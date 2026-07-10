@@ -397,6 +397,13 @@ a.restart {
   color: var(--phosphor-dim);
 }
 
+.patch-date {
+  flex-shrink: 0;
+  color: var(--phosphor);
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
 .patch-title {
   font-size: clamp(16px, 2.2vmin, 22px);
   font-weight: normal;

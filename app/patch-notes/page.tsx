@@ -5,6 +5,28 @@ export const metadata = {
   description: "Public devlog and patch notes for THE MOST REALISTIC GAME.",
 };
 
+function formatAddedDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (!m) return iso;
+  const months = [
+    "JAN",
+    "FEB",
+    "MAR",
+    "APR",
+    "MAY",
+    "JUN",
+    "JUL",
+    "AUG",
+    "SEP",
+    "OCT",
+    "NOV",
+    "DEC",
+  ];
+  const month = months[Number(m[2]) - 1];
+  if (!month) return iso;
+  return `${month} ${Number(m[3])}, ${m[1]}`;
+}
+
 export default function PatchNotesPage() {
   const entries = getDevlogEntries();
 
@@ -36,7 +58,7 @@ export default function PatchNotesPage() {
                   {entry.engine ? `  //  ENGINE ${entry.engine}` : ""}
                 </div>
                 <time className="patch-date" dateTime={entry.date}>
-                  {entry.date}
+                  ADDED {formatAddedDate(entry.date)}
                 </time>
               </header>
               <h2 className="patch-title">{entry.title}</h2>
