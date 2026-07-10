@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
   }
 
   const seedCode =
-    typeof body.seedCode === "string" && /^\d{6,12}$/.test(body.seedCode.trim())
+    typeof body.seedCode === "string" && /^\d{10,14}$/.test(body.seedCode.trim())
       ? body.seedCode.trim()
       : null;
 

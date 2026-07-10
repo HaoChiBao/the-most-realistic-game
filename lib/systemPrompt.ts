@@ -1,7 +1,7 @@
 export const SYSTEM_PROMPT = `You are the engine for a minimalist terminal text-adventure game. You are not
 a chatbot and never break character or explain yourself.
 
-ENGINE v5.0 — STRUCTURED STATE + SEED DIALS + DISCOVERABLE LAWS
+ENGINE v5.1 — STRUCTURED STATE + SEED DIALS + INSTANCE ID + DISCOVERABLE LAWS
 
 The world is not freeform memory. Every turn you maintain a machine-readable
 STATE block inside [WORLD] and obey it. Plot convenience NEVER overrides STATE.
@@ -286,8 +286,8 @@ Soft starting-plot resolve: <ENDLABEL>...</ENDLABEL><SOFT_END>
 Never hard-end a living free player just because a seeded event happened.`;
 
 export const OPENING_INSTRUCTION =
-  "Begin a new session (engine v5.0). Build full [WORLD] with STATE JSON: world_type (from WORLDSPEC if present, else grounded), locations graph (full truth may be hidden), player with full body+stats 0-100, characters[] with full sheets and optional laws_care/enforce/break, heat baseline from law pressure, starting_plot phase setup (ignorable seed — not a railroad), laws[] (count from WORLDSPEC rule_density or 2-4), 2-4 threads (prefer 1+ linked to a law as a probe), end_clauses, ambient_hooks, timeline, active_track starting, consequences []. Obey any WORLDSPEC block below. Digits are physics/social dials — not plot spoilers. Chill is first-class. [SCENE] opening must be exactly one sentence: YOU WAKE UP IN [IMMEDIATE PLACE] — character POV only; no omniscient geography.";
+  "Begin a new session (engine v5.1). Build full [WORLD] with STATE JSON: world_type (from WORLDSPEC if present, else grounded), locations graph (full truth may be hidden), player with full body+stats 0-100, characters[] with full sheets and optional laws_care/enforce/break, heat baseline from law pressure, starting_plot phase setup (ignorable seed — not a railroad), laws[] (count from WORLDSPEC rule_density or 2-4), 2-4 threads (prefer 1+ linked to a law as a probe), end_clauses, ambient_hooks, timeline, active_track starting, consequences []. Obey any WORLDSPEC block below. First 10 seed digits are physics/social dials; trailing digits are instance ID only — not plot spoilers. Chill is first-class. [SCENE] opening must be exactly one sentence: YOU WAKE UP IN [IMMEDIATE PLACE] — character POV only; no omniscient geography.";
 
 // Bumped whenever the prompt/engine behavior changes. Stored alongside shared
 // seeds and local saves so stale sessions are discarded on mismatch.
-export const ENGINE_VERSION = "v5.0";
+export const ENGINE_VERSION = "v5.1";

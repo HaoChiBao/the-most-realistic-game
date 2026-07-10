@@ -10,7 +10,9 @@ import {
 import {
   decodeSeed,
   dialBreakdown,
+  formatDialTableForDebug,
   formatWorldSpecForPrompt,
+  parseSeedCode,
 } from "@/lib/worldSpec";
 
 type Turn = { role: "user" | "assistant"; content: string };
@@ -84,14 +86,21 @@ export default function DebugPanel({ open, onClose, history, meta }: Props) {
   }, [open]);
 
   const sections: DebugSection[] = useMemo(() => {
+    const parsed = meta.seedCode ? parseSeedCode(meta.seedCode) : null;
     const spec = meta.seedCode ? decodeSeed(meta.seedCode) : null;
+    const seedDialTable = spec ? formatDialTableForDebug(spec) : null;
     const worldSpecJson = spec
       ? JSON.stringify(
           {
             code: spec.code,
-            dials: dialBreakdown(spec),
+            dial_code: spec.dial_code,
+            instance_id: spec.instance_id || null,
+            axes: dialBreakdown(spec),
             world_type: spec.world_type,
             law_count: spec.law_count,
+            raw_digits: spec.raw_digits,
+            effective_digits: spec.digits,
+            labels: spec.labels,
             constraints: spec.constraints,
             crossed_pressures: spec.crossed_pressures,
             full: spec,
@@ -107,10 +116,16 @@ export default function DebugPanel({ open, onClose, history, meta }: Props) {
 
     return buildDebugSections({
       history,
-      meta: { ...meta, engineVersion: engineVersion ?? meta.engineVersion },
+      meta: {
+        ...meta,
+        engineVersion: engineVersion ?? meta.engineVersion,
+        dialCode: parsed?.dial_code ?? null,
+        instanceId: parsed?.instance_id || null,
+      },
       systemPrompt,
       openingInstruction: openingWithSpec,
       worldSpecJson,
+      seedDialTable,
     });
   }, [history, meta, systemPrompt, openingInstruction, engineVersion]);
 

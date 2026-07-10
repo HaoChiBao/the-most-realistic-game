@@ -6,11 +6,36 @@
  */
 
 export const SEED_DIGIT_COUNT = 10;
+/** Random suffix after the 10 dial digits — unique instance ID, not a dial. */
+export const SEED_INSTANCE_ID_LENGTH = 4;
+export const SEED_CODE_MIN_LENGTH = SEED_DIGIT_COUNT;
+export const SEED_CODE_MAX_LENGTH = SEED_DIGIT_COUNT + SEED_INSTANCE_ID_LENGTH;
+
+export const DIAL_AXES = [
+  { digit: 1, key: "world_type", name: "World type" },
+  { digit: 2, key: "place_grain", name: "Place grain" },
+  { digit: 3, key: "isolation", name: "Isolation" },
+  { digit: 4, key: "law_pressure", name: "Law pressure" },
+  { digit: 5, key: "information_opacity", name: "Information opacity" },
+  { digit: 6, key: "npc_agency", name: "NPC agency" },
+  { digit: 7, key: "scarcity", name: "Scarcity" },
+  { digit: 8, key: "rule_density", name: "Rule density" },
+  { digit: 9, key: "consequence_stickiness", name: "Consequence stickiness" },
+  { digit: 10, key: "tone", name: "Tone / weirdness" },
+] as const;
 
 export type WorldType = "grounded" | "heightened" | "fantastical";
 
 export type WorldSpec = {
+  /** Full seed string (dial code + optional instance ID). */
   code: string;
+  /** First 10 digits — WorldSpec dials only. */
+  dial_code: string;
+  /** Trailing digits after position 10 — instance ID, not a dial. */
+  instance_id: string;
+  /** Raw dial digits from dial_code (D10 may exceed effective tone). */
+  raw_digits: number[];
+  /** Effective dial values (D10 tone clamped by world_type). */
   digits: number[];
   world_type: WorldType;
   place_grain: number; // 0-9
@@ -189,27 +214,43 @@ function buildConstraints(spec: {
   return c;
 }
 
+/** Split a seed into dial code (10 digits) and instance ID suffix. */
+export function parseSeedCode(code: string): {
+  code: string;
+  dial_code: string;
+  instance_id: string;
+} | null {
+  const cleaned = String(code ?? "").trim();
+  if (!/^\d{10,14}$/.test(cleaned)) return null;
+  return {
+    code: cleaned,
+    dial_code: cleaned.slice(0, SEED_DIGIT_COUNT),
+    instance_id: cleaned.slice(SEED_DIGIT_COUNT),
+  };
+}
+
 /**
  * Decode a numeric seed code into a WorldSpec.
- * Accepts 6–12 digits; uses first 10 (pads with 0 if shorter).
+ * Layout: [10 dial digits][0–4 instance ID digits].
+ * Only the first 10 digits affect WorldSpec; the suffix is a unique instance ID.
  */
 export function decodeSeed(code: string): WorldSpec | null {
-  const cleaned = String(code ?? "").trim();
-  if (!/^\d{6,12}$/.test(cleaned)) return null;
+  const parts = parseSeedCode(code);
+  if (!parts) return null;
 
-  const raw = cleaned.padEnd(SEED_DIGIT_COUNT, "0").slice(0, SEED_DIGIT_COUNT);
-  const digits = raw.split("").map((ch) => digit(Number(ch)));
+  const raw_digits = parts.dial_code.split("").map((ch) => digit(Number(ch)));
 
-  const world_type = bandWorldType(digits[0]);
-  const place_grain = digits[1];
-  const isolation = digits[2];
-  const law_pressure = digits[3];
-  const information_opacity = digits[4];
-  const npc_agency = digits[5];
-  const scarcity = digits[6];
-  const rule_density = digits[7];
-  const consequence_stickiness = digits[8];
-  const tone = clampTone(digits[9], world_type);
+  const world_type = bandWorldType(raw_digits[0]);
+  const place_grain = raw_digits[1];
+  const isolation = raw_digits[2];
+  const law_pressure = raw_digits[3];
+  const information_opacity = raw_digits[4];
+  const npc_agency = raw_digits[5];
+  const scarcity = raw_digits[6];
+  const rule_density = raw_digits[7];
+  const consequence_stickiness = raw_digits[8];
+  const tone = clampTone(raw_digits[9], world_type);
+  const digits = [...raw_digits.slice(0, 9), tone];
   const law_count = lawCountFromDensity(rule_density);
 
   const labels = {
@@ -231,8 +272,11 @@ export function decodeSeed(code: string): WorldSpec | null {
   };
 
   const base = {
-    code: cleaned,
-    digits: [...digits.slice(0, 9), tone],
+    code: parts.code,
+    dial_code: parts.dial_code,
+    instance_id: parts.instance_id,
+    raw_digits,
+    digits,
     world_type,
     place_grain,
     isolation,
@@ -256,8 +300,12 @@ export function decodeSeed(code: string): WorldSpec | null {
 
 /** Prompt block injected into the opening instruction. */
 export function formatWorldSpecForPrompt(spec: WorldSpec): string {
+  const idLine = spec.instance_id
+    ? `INSTANCE ID ${spec.instance_id} (not a dial — unique world instance)`
+    : "INSTANCE ID (none — legacy 10-digit code)";
   const dialLines = [
-    `D1 world_type=${spec.world_type} (${spec.digits[0]})`,
+    `DIAL CODE ${spec.dial_code} · ${idLine}`,
+    `D1 world_type=${spec.world_type} (${spec.raw_digits[0]})`,
     `D2 place_grain=${spec.place_grain} (${spec.labels.place_grain})`,
     `D3 isolation=${spec.isolation} (${spec.labels.isolation})`,
     `D4 law_pressure=${spec.law_pressure} (${spec.labels.law_pressure})`,
@@ -266,11 +314,11 @@ export function formatWorldSpecForPrompt(spec: WorldSpec): string {
     `D7 scarcity=${spec.scarcity} (${spec.labels.scarcity})`,
     `D8 rule_density=${spec.rule_density} → seed ${spec.law_count} laws[] (${spec.labels.rule_density})`,
     `D9 stickiness=${spec.consequence_stickiness} (${spec.labels.consequence_stickiness})`,
-    `D10 tone=${spec.tone} clamped (${spec.labels.tone})`,
+    `D10 tone=${spec.tone} (raw ${spec.raw_digits[9]}, clamped by D1) (${spec.labels.tone})`,
   ];
 
   return [
-    `SEED CODE ${spec.code} — WORLDSPEC (physics/social dials, NOT a plot spoiler sheet)`,
+    `SEED ${spec.code} — WORLDSPEC (physics/social dials, NOT a plot spoiler sheet)`,
     ...dialLines,
     "CONSTRAINTS:",
     ...spec.constraints.map((c) => `- ${c}`),
@@ -285,18 +333,58 @@ export function buildOpeningInstruction(base: string, spec: WorldSpec | null): s
   return `${base}\n\n${formatWorldSpecForPrompt(spec)}`;
 }
 
-/** Per-digit summary for debug UI. */
-export function dialBreakdown(spec: WorldSpec): { digit: number; name: string; value: number; label: string }[] {
+export type DialAxisRow = {
+  digit: number;
+  axis: string;
+  key: string;
+  raw_digit: number;
+  effective_value: number;
+  label: string;
+  note?: string;
+};
+
+/** Per-axis summary for debug UI — all 10 dials with raw vs effective where they differ. */
+export function dialBreakdown(spec: WorldSpec): DialAxisRow[] {
+  const toneNote =
+    spec.raw_digits[9] !== spec.tone
+      ? `clamped from ${spec.raw_digits[9]} by world_type=${spec.world_type}`
+      : undefined;
   return [
-    { digit: 1, name: "world_type", value: spec.digits[0], label: spec.labels.world_type },
-    { digit: 2, name: "place_grain", value: spec.place_grain, label: spec.labels.place_grain },
-    { digit: 3, name: "isolation", value: spec.isolation, label: spec.labels.isolation },
-    { digit: 4, name: "law_pressure", value: spec.law_pressure, label: spec.labels.law_pressure },
-    { digit: 5, name: "opacity", value: spec.information_opacity, label: spec.labels.information_opacity },
-    { digit: 6, name: "npc_agency", value: spec.npc_agency, label: spec.labels.npc_agency },
-    { digit: 7, name: "scarcity", value: spec.scarcity, label: spec.labels.scarcity },
-    { digit: 8, name: "rule_density", value: spec.rule_density, label: `${spec.labels.rule_density} → ${spec.law_count} laws` },
-    { digit: 9, name: "stickiness", value: spec.consequence_stickiness, label: spec.labels.consequence_stickiness },
-    { digit: 10, name: "tone", value: spec.tone, label: spec.labels.tone },
+    { digit: 1, axis: "World type", key: "world_type", raw_digit: spec.raw_digits[0], effective_value: spec.digits[0], label: spec.labels.world_type },
+    { digit: 2, axis: "Place grain", key: "place_grain", raw_digit: spec.place_grain, effective_value: spec.place_grain, label: spec.labels.place_grain },
+    { digit: 3, axis: "Isolation", key: "isolation", raw_digit: spec.isolation, effective_value: spec.isolation, label: spec.labels.isolation },
+    { digit: 4, axis: "Law pressure", key: "law_pressure", raw_digit: spec.law_pressure, effective_value: spec.law_pressure, label: spec.labels.law_pressure },
+    { digit: 5, axis: "Information opacity", key: "information_opacity", raw_digit: spec.information_opacity, effective_value: spec.information_opacity, label: spec.labels.information_opacity },
+    { digit: 6, axis: "NPC agency", key: "npc_agency", raw_digit: spec.npc_agency, effective_value: spec.npc_agency, label: spec.labels.npc_agency },
+    { digit: 7, axis: "Scarcity", key: "scarcity", raw_digit: spec.scarcity, effective_value: spec.scarcity, label: spec.labels.scarcity },
+    { digit: 8, axis: "Rule density", key: "rule_density", raw_digit: spec.rule_density, effective_value: spec.rule_density, label: `${spec.labels.rule_density} → ${spec.law_count} laws` },
+    { digit: 9, axis: "Consequence stickiness", key: "consequence_stickiness", raw_digit: spec.consequence_stickiness, effective_value: spec.consequence_stickiness, label: spec.labels.consequence_stickiness },
+    { digit: 10, axis: "Tone / weirdness", key: "tone", raw_digit: spec.raw_digits[9], effective_value: spec.tone, label: spec.labels.tone, note: toneNote },
   ];
+}
+
+/** Human-readable dial table for debug dumps. */
+export function formatDialTableForDebug(spec: WorldSpec): string {
+  const rows = dialBreakdown(spec);
+  const pad = (s: string, n: number) => s.padEnd(n).slice(0, n);
+  const lines = [
+    `FULL SEED:    ${spec.code}`,
+    `DIAL CODE:    ${spec.dial_code}  (positions 1–10 — world physics / social dials)`,
+    `INSTANCE ID:  ${spec.instance_id || "(none — legacy 10-digit code)"}`,
+    "",
+    `${pad("AXIS", 24)} ${pad("D#", 3)} ${pad("RAW", 4)} ${pad("EFF", 4)} LABEL`,
+    `${"-".repeat(24)} ${"-".repeat(3)} ${"-".repeat(4)} ${"-".repeat(4)} ${"-".repeat(20)}`,
+    ...rows.map((r) => {
+      const eff =
+        r.raw_digit === r.effective_value
+          ? String(r.effective_value)
+          : `${r.effective_value}*`;
+      const note = r.note ? `  // ${r.note}` : "";
+      return `${pad(r.axis, 24)} ${pad(String(r.digit), 3)} ${pad(String(r.raw_digit), 4)} ${pad(eff, 4)} ${r.label}${note}`;
+    }),
+    "",
+    `world_type band: ${spec.world_type}`,
+    `law_count (from D8): ${spec.law_count}`,
+  ];
+  return lines.join("\n");
 }

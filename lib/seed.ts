@@ -1,14 +1,26 @@
 // Helpers for the seed-sharing feature.
 //
-// Dual nature of a seed (engine v5.0+):
-// 1) Digits = generation dials (WorldSpec) that bias NEW world creation.
-// 2) Stored turn-1 bible (opening + [WORLD]) = exact shareable truth on load.
+// Dual nature of a seed (engine v5.1+):
+// 1) First 10 digits = WorldSpec dials that bias NEW world creation.
+// 2) Trailing 1–4 digits = instance ID (expands finite dial space; not a dial).
+// 3) Stored turn-1 bible (opening + [WORLD]) = exact shareable truth on load.
 // Loading /s/CODE never regenerates from digits — it replays the stored bible.
 // See lib/worldSpec.ts for dial decode.
 
-import { decodeSeed } from "@/lib/worldSpec";
+import {
+  decodeSeed,
+  parseSeedCode,
+  SEED_DIGIT_COUNT,
+  SEED_INSTANCE_ID_LENGTH,
+} from "@/lib/worldSpec";
 
-export { decodeSeed };
+export { decodeSeed, parseSeedCode };
+export {
+  SEED_DIGIT_COUNT,
+  SEED_INSTANCE_ID_LENGTH,
+  SEED_CODE_MIN_LENGTH,
+  SEED_CODE_MAX_LENGTH,
+} from "@/lib/worldSpec";
 
 // Split a raw engine response into its visible scene and hidden world blocks.
 export function splitSceneWorld(raw: string): {
@@ -57,16 +69,26 @@ export function deriveSetting(opening: string): string {
   return label.toLowerCase();
 }
 
-// 10-digit numeric seed code, e.g. "8194023475". First digit is never zero so
-// the code is always a full 10 characters. Digits are WorldSpec dials at gen.
+// Seed layout (engine v5.1+):
+// [10 dial digits][4 instance ID digits]
+// Dials bias NEW world generation; instance ID expands the finite dial space.
+// Stored turn-1 bible remains exact share truth on load.
+
+// 14-digit seed: 10 dials + 4-digit instance ID. First dial digit is never zero.
 export function makeSeedCode(): string {
   const first = 1 + Math.floor(Math.random() * 9);
-  let rest = "";
-  for (let i = 0; i < 9; i++) rest += Math.floor(Math.random() * 10);
-  return `${first}${rest}`;
+  let dials = `${first}`;
+  for (let i = 1; i < SEED_DIGIT_COUNT; i++) {
+    dials += Math.floor(Math.random() * 10);
+  }
+  let instanceId = "";
+  for (let i = 0; i < SEED_INSTANCE_ID_LENGTH; i++) {
+    instanceId += Math.floor(Math.random() * 10);
+  }
+  return `${dials}${instanceId}`;
 }
 
-// Accept only 6-12 digit numeric codes.
+// Accept 10–14 digit numeric codes (10 dials, optional 1–4 digit instance suffix).
 export function isValidCode(code: string): boolean {
-  return /^\d{6,12}$/.test(code);
+  return /^\d{10,14}$/.test(code);
 }

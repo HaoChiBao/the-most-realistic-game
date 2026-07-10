@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
   // Prefer client-allocated dial code (digits already biased generation).
   // Fall back to random codes on collision / missing preferred code.
   const preferred =
-    typeof body.code === "string" && /^\d{6,12}$/.test(body.code.trim())
+    typeof body.code === "string" && /^\d{10,14}$/.test(body.code.trim())
       ? body.code.trim()
       : null;
 

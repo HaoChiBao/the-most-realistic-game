@@ -11,6 +11,8 @@ export type DebugSection = {
 export type SessionDebugMeta = {
   engineVersion?: string;
   seedCode: string | null;
+  dialCode?: string | null;
+  instanceId?: string | null;
   turnCount: number;
   assistantTurns: number;
   ended: boolean;
@@ -124,9 +126,16 @@ export function buildDebugSections(opts: {
   systemPrompt: string | null;
   openingInstruction: string | null;
   worldSpecJson?: string | null;
+  seedDialTable?: string | null;
 }): DebugSection[] {
-  const { history, meta, systemPrompt, openingInstruction, worldSpecJson } =
-    opts;
+  const {
+    history,
+    meta,
+    systemPrompt,
+    openingInstruction,
+    worldSpecJson,
+    seedDialTable,
+  } = opts;
   const sections: DebugSection[] = [];
 
   sections.push({
@@ -136,6 +145,8 @@ export function buildDebugSections(opts: {
     body: pretty({
       engineVersion: meta.engineVersion ?? null,
       seedCode: meta.seedCode,
+      dialCode: meta.dialCode ?? null,
+      instanceId: meta.instanceId ?? null,
       turnCount: meta.turnCount,
       assistantTurns: meta.assistantTurns,
       ended: meta.ended,
@@ -146,10 +157,19 @@ export function buildDebugSections(opts: {
     }),
   });
 
+  if (seedDialTable) {
+    sections.push({
+      id: "seed-dials",
+      title: "02 · Seed dials (10 axes)",
+      kind: "text",
+      body: seedDialTable,
+    });
+  }
+
   if (worldSpecJson) {
     sections.push({
       id: "worldspec",
-      title: "02 · WorldSpec (seed dials)",
+      title: "03 · WorldSpec (full JSON)",
       kind: "json",
       body: worldSpecJson,
     });
@@ -158,7 +178,7 @@ export function buildDebugSections(opts: {
   if (systemPrompt) {
     sections.push({
       id: "system-prompt",
-      title: worldSpecJson ? "03 · System prompt" : "02 · System prompt",
+      title: seedDialTable ? "04 · System prompt" : "02 · System prompt",
       kind: "prompt",
       body: systemPrompt,
     });
@@ -167,17 +187,23 @@ export function buildDebugSections(opts: {
   if (openingInstruction) {
     sections.push({
       id: "opening",
-      title: worldSpecJson ? "04 · Opening instruction" : "03 · Opening instruction",
+      title: seedDialTable ? "05 · Opening instruction" : "03 · Opening instruction",
       kind: "prompt",
       body: openingInstruction,
     });
   }
 
   const last = lastAssistant(history);
+  let sectionNum = sections.length;
+  const nextTitle = (label: string) => {
+    sectionNum += 1;
+    return `${String(sectionNum).padStart(2, "0")} · ${label}`;
+  };
+
   if (!last) {
     sections.push({
       id: "empty",
-      title: "04 · Latest turn",
+      title: nextTitle("Latest turn"),
       kind: "text",
       body: "(no assistant turn yet — start or wait for the opening)",
     });
@@ -190,21 +216,21 @@ export function buildDebugSections(opts: {
 
   sections.push({
     id: "latest-scene",
-    title: "04 · Latest SCENE",
+    title: nextTitle("Latest SCENE"),
     kind: "text",
     body: scene ?? "(no [SCENE] block)",
   });
 
   sections.push({
     id: "latest-world-raw",
-    title: "05 · Latest WORLD (raw)",
+    title: nextTitle("Latest WORLD (raw)"),
     kind: "text",
     body: world ?? "(no [WORLD] block)",
   });
 
   sections.push({
     id: "state-json",
-    title: "06 · STATE (parsed JSON)",
+    title: nextTitle("STATE (parsed JSON)"),
     kind: "json",
     body: state
       ? pretty(state)
@@ -214,34 +240,34 @@ export function buildDebugSections(opts: {
   if (state && typeof state === "object" && state !== null) {
     const s = state as Record<string, unknown>;
     const slices: [string, string, unknown][] = [
-      ["player", "07 · Player", s.player],
-      ["characters", "08 · Characters", s.characters],
-      ["laws", "09 · Laws (discoverable)", s.laws],
-      ["heat", "10 · Heat / wanted", s.heat],
-      ["locations", "11 · Locations", {
+      ["player", "Player", s.player],
+      ["characters", "Characters", s.characters],
+      ["laws", "Laws (discoverable)", s.laws],
+      ["heat", "Heat / wanted", s.heat],
+      ["locations", "Locations", {
         player_location: s.player_location,
         locations: s.locations,
       }],
-      ["starting-plot", "12 · Starting plot", s.starting_plot ?? s.main_plot],
-      ["threads", "13 · Threads", s.threads],
-      ["consequences", "14 · Consequences", s.consequences],
-      ["end-clauses", "15 · End clauses / end_state", {
+      ["starting-plot", "Starting plot", s.starting_plot ?? s.main_plot],
+      ["threads", "Threads", s.threads],
+      ["consequences", "Consequences", s.consequences],
+      ["end-clauses", "End clauses / end_state", {
         end_clauses: s.end_clauses,
         end_state: s.end_state,
         active_track: s.active_track,
       }],
-      ["ambient", "16 · Ambient / timeline / clock", {
+      ["ambient", "Ambient / timeline / clock", {
         ambient_hooks: s.ambient_hooks,
         timeline: s.timeline,
         clock: s.clock,
         world_type: s.world_type,
       }],
     ];
-    for (const [id, title, value] of slices) {
+    for (const [id, label, value] of slices) {
       if (value === undefined) continue;
       sections.push({
         id,
-        title,
+        title: nextTitle(label),
         kind: "json",
         body: pretty(value),
       });
@@ -250,7 +276,7 @@ export function buildDebugSections(opts: {
 
   sections.push({
     id: "history",
-    title: "17 · Full history (all turns)",
+    title: nextTitle("Full history (all turns)"),
     kind: "json",
     body: pretty(
       history.map((t, i) => ({

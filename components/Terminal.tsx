@@ -19,7 +19,7 @@ import {
   saveSession,
 } from "@/lib/save";
 import DebugPanel from "@/components/DebugPanel";
-import { makeSeedCode } from "@/lib/seed";
+import { makeSeedCode, parseSeedCode } from "@/lib/seed";
 
 const MAX_INPUT = 90;
 const MAX_CHECKPOINTS = 20;
@@ -377,12 +377,12 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   );
 
   const boot = useCallback(async () => {
-    let engineLine = "REALITY ENGINE v5.0  //  ONLINE";
+    let engineLine = "REALITY ENGINE v5.1  //  ONLINE";
     try {
       const res = await fetch("/api/engine");
       if (res.ok) {
         const data = await res.json();
-        const ver = data.version ?? "v5.0";
+        const ver = data.version ?? "v5.1";
         const banner = data.banner ?? "ONLINE";
         engineLine = `REALITY ENGINE ${ver}  //  ${banner}`;
       }
@@ -741,6 +741,12 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         history={historyRef.current.map((t) => ({ ...t }))}
         meta={{
           seedCode: seedRef.current,
+          dialCode: seedRef.current
+            ? parseSeedCode(seedRef.current)?.dial_code ?? null
+            : null,
+          instanceId: seedRef.current
+            ? parseSeedCode(seedRef.current)?.instance_id || null
+            : null,
           turnCount: historyRef.current.filter((t) => t.role === "user").length,
           assistantTurns: historyRef.current.filter(
             (t) => t.role === "assistant"
