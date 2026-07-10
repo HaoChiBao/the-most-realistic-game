@@ -1,11 +1,11 @@
-import { getDevlogEntries } from "@/lib/devlog";
+import { getDevlogByDay } from "@/lib/devlog";
 
 export const metadata = {
   title: "Patch notes — THE MOST REALISTIC GAME",
   description: "Public devlog and patch notes for THE MOST REALISTIC GAME.",
 };
 
-function formatAddedDate(iso: string): string {
+function formatDayHeading(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
   if (!m) return iso;
   const months = [
@@ -28,7 +28,7 @@ function formatAddedDate(iso: string): string {
 }
 
 export default function PatchNotesPage() {
-  const entries = getDevlogEntries();
+  const days = getDevlogByDay();
 
   return (
     <div className="crt">
@@ -46,43 +46,54 @@ export default function PatchNotesPage() {
         </div>
 
         <div className="patch-body">
-          {entries.length === 0 && (
+          {days.length === 0 && (
             <div className="entry system">no transmissions yet.</div>
           )}
 
-          {entries.map((entry) => (
-            <article key={entry.id} className="patch-entry">
-              <header className="patch-entry-head">
-                <div className="patch-version">
-                  v{entry.version}
-                  {entry.engine ? `  //  ENGINE ${entry.engine}` : ""}
-                </div>
-                <time className="patch-date" dateTime={entry.date}>
-                  ADDED {formatAddedDate(entry.date)}
-                </time>
+          {days.map((day) => (
+            <section key={day.date} className="patch-day">
+              <header className="patch-day-head">
+                <time dateTime={day.date}>{formatDayHeading(day.date)}</time>
+                <span className="patch-day-count">
+                  {day.entries.length}{" "}
+                  {day.entries.length === 1 ? "update" : "updates"}
+                </span>
               </header>
-              <h2 className="patch-title">{entry.title}</h2>
-              <p className="patch-summary">{entry.summary}</p>
-              {entry.tags && entry.tags.length > 0 && (
-                <div className="patch-tags">
-                  {entry.tags.map((tag) => (
-                    <span key={tag} className="patch-tag">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <ul className="patch-changes">
-                {entry.changes.map((change) => (
-                  <li key={change}>{change}</li>
+
+              <div className="patch-day-entries">
+                {day.entries.map((entry) => (
+                  <article key={entry.id} className="patch-entry">
+                    <header className="patch-entry-head">
+                      <div className="patch-version">
+                        v{entry.version}
+                        {entry.engine ? `  //  ENGINE ${entry.engine}` : ""}
+                      </div>
+                    </header>
+                    <h2 className="patch-title">{entry.title}</h2>
+                    <p className="patch-summary">{entry.summary}</p>
+                    {entry.tags && entry.tags.length > 0 && (
+                      <div className="patch-tags">
+                        {entry.tags.map((tag) => (
+                          <span key={tag} className="patch-tag">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <ul className="patch-changes">
+                      {entry.changes.map((change) => (
+                        <li key={change}>{change}</li>
+                      ))}
+                    </ul>
+                    {entry.linear && entry.linear.length > 0 && (
+                      <div className="patch-linear">
+                        {entry.linear.join(" · ")}
+                      </div>
+                    )}
+                  </article>
                 ))}
-              </ul>
-              {entry.linear && entry.linear.length > 0 && (
-                <div className="patch-linear">
-                  {entry.linear.join(" · ")}
-                </div>
-              )}
-            </article>
+              </div>
+            </section>
           ))}
         </div>
 

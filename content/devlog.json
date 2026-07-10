@@ -1,9 +1,25 @@
 [
   {
+    "id": "2026-07-10-patch-day-group",
+    "version": "0.5.7",
+    "engine": "v5.5",
+    "date": "2026-07-10",
+    "significance": 22,
+    "title": "Patch notes grouped by day",
+    "summary": "Patch notes now roll up under a calendar-day heading, sorted by significance within each day.",
+    "tags": ["meta", "ux"],
+    "changes": [
+      "/patch-notes groups updates by date (newest day first)",
+      "Within a day: significance 1–100, highest at top",
+      "content/README.md documents the convention for future entries"
+    ]
+  },
+  {
     "id": "2026-07-10-abstract-open",
     "version": "0.5.6",
     "engine": "v5.5",
     "date": "2026-07-10",
+    "significance": 82,
     "title": "Abstract wake-up lines",
     "summary": "Openings are generic place labels only — no sensory detail until the player acts.",
     "tags": ["engine", "gameplay"],
@@ -19,6 +35,7 @@
     "version": "0.5.5",
     "engine": "v5.4",
     "date": "2026-07-10",
+    "significance": 78,
     "title": "Grounded GTA-style worlds & plain openings",
     "summary": "Seed dials bias toward contemporary normal settings. Openings use simple place names — forest, street, motel — not fairy tale prose.",
     "tags": ["engine", "seeds", "gameplay"],
@@ -32,24 +49,11 @@
     ]
   },
   {
-    "id": "2026-07-10-typing-sfx",
-    "version": "0.5.4",
-    "engine": "v5.3",
-    "date": "2026-07-10",
-    "title": "Response typing sound",
-    "summary": "A looping typewriter SFX plays while engine responses reveal character-by-character during streaming and seed load.",
-    "tags": ["ux", "audio"],
-    "changes": [
-      "Looping typing sound during typewriter reveal (stream + seed/retry)",
-      "public/sounds/response_typing_sound.wav + lib/typingSound.ts",
-      "Stops on turn complete, error, or new world"
-    ]
-  },
-  {
     "id": "2026-07-10-v53",
     "version": "0.5.3",
     "engine": "v5.3",
     "date": "2026-07-10",
+    "significance": 95,
     "title": "Conditions, story debug & hybrid randomness",
     "summary": "Broad condition families tick every turn. Server rolls random table+tier; model narrates. Full story and randomness observability in debug.",
     "tags": ["engine", "conditions", "randomness", "debug"],
@@ -66,6 +70,7 @@
     "version": "0.5.0",
     "engine": "v5.0",
     "date": "2026-07-10",
+    "significance": 90,
     "title": "Seed dials, WorldSpec & discoverable laws",
     "summary": "Each digit of the seed code biases world physics and social physics. Worlds seed discoverable laws; share links still store the exact turn-1 bible.",
     "tags": ["engine", "seeds", "m8"],
@@ -95,40 +100,11 @@
     ]
   },
   {
-    "id": "2026-07-10-character-pov",
-    "version": "0.4.2",
-    "engine": "v4.2",
-    "date": "2026-07-10",
-    "title": "Opening lines stay in character POV",
-    "summary": "Wake-up scenes only say what you could notice on the spot — hidden geography and plot truth stay in STATE until you discover them.",
-    "tags": ["engine", "gameplay"],
-    "changes": [
-      "Opening: YOU WAKE UP IN [immediate place] only — no 'buried under a city' spoilers",
-      "Hedge uncertain impressions (seemingly abandoned) instead of omniscient labels",
-      "Character-POV rule applies to all [SCENE] text, not just the opening",
-      "Engine version bump to v4.2"
-    ]
-  },
-  {
-    "id": "2026-07-10-starting-plot",
-    "version": "0.4.1",
-    "engine": "v4.1",
-    "date": "2026-07-10",
-    "title": "Starting plot, not main plot",
-    "summary": "Renames the seeded tension to starting_plot and tells the engine not to railroad players back onto it.",
-    "tags": ["engine", "gameplay"],
-    "changes": [
-      "STATE key main_plot → starting_plot; active_track default starting",
-      "Soft-end label STARTING PLOT RESOLVED (never MAIN PLOT)",
-      "Explicit no-railroad rules: chill exploration is first-class; ambient nudges are not plot magnets",
-      "Engine version bump to v4.1 (invalidates v4.0 local saves)"
-    ]
-  },
-  {
     "id": "2026-07-10-m7",
     "version": "0.4.0",
     "engine": "v4.0",
     "date": "2026-07-10",
+    "significance": 88,
     "title": "Structured state, combat realism & living world",
     "summary": "Engine v4.0: JSON character/inventory/body stats, hard capability ceilings, soft endings so the world continues after the starting plot, heat, locations, and open-world chill.",
     "tags": ["engine", "gameplay", "m7"],
@@ -160,18 +136,35 @@
     ]
   },
   {
-    "id": "2026-07-10-patch-notes",
-    "version": "0.3.2",
-    "engine": "v3.3",
+    "id": "2026-07-10-character-pov",
+    "version": "0.4.2",
+    "engine": "v4.2",
     "date": "2026-07-10",
-    "title": "Public patch notes page",
-    "summary": "Devlog lives in-repo and renders at /patch-notes.",
-    "tags": ["meta"],
-    "linear": ["YAN-262"],
+    "significance": 72,
+    "title": "Opening lines stay in character POV",
+    "summary": "Wake-up scenes only say what you could notice on the spot — hidden geography and plot truth stay in STATE until you discover them.",
+    "tags": ["engine", "gameplay"],
     "changes": [
-      "New /patch-notes route (CRT styled)",
-      "content/devlog.json is the source of truth — append to publish",
-      "Links from the terminal and gallery"
+      "Opening: YOU WAKE UP IN [immediate place] only — no 'buried under a city' spoilers",
+      "Hedge uncertain impressions (seemingly abandoned) instead of omniscient labels",
+      "Character-POV rule applies to all [SCENE] text, not just the opening",
+      "Engine version bump to v4.2"
+    ]
+  },
+  {
+    "id": "2026-07-10-starting-plot",
+    "version": "0.4.1",
+    "engine": "v4.1",
+    "date": "2026-07-10",
+    "significance": 70,
+    "title": "Starting plot, not main plot",
+    "summary": "Renames the seeded tension to starting_plot and tells the engine not to railroad players back onto it.",
+    "tags": ["engine", "gameplay"],
+    "changes": [
+      "STATE key main_plot → starting_plot; active_track default starting",
+      "Soft-end label STARTING PLOT RESOLVED (never MAIN PLOT)",
+      "Explicit no-railroad rules: chill exploration is first-class; ambient nudges are not plot magnets",
+      "Engine version bump to v4.1 (invalidates v4.0 local saves)"
     ]
   },
   {
@@ -179,6 +172,7 @@
     "version": "0.3.1",
     "engine": "v3.3",
     "date": "2026-07-10",
+    "significance": 55,
     "title": "Rate limits & seed RPC lockdown",
     "summary": "Hardened the public API so the model key and shared-world table are harder to abuse.",
     "tags": ["security", "ops"],
@@ -191,19 +185,34 @@
     ]
   },
   {
-    "id": "2026-07-09-save",
-    "version": "0.3.0",
-    "engine": "v3.3",
-    "date": "2026-07-09",
-    "title": "Local session save & resume",
-    "summary": "Close the tab, crash, or come back later — progress and world seed restore from localStorage.",
-    "tags": ["feature", "persistence"],
-    "linear": ["YAN-239"],
+    "id": "2026-07-10-typing-sfx",
+    "version": "0.5.4",
+    "engine": "v5.3",
+    "date": "2026-07-10",
+    "significance": 35,
+    "title": "Response typing sound",
+    "summary": "A looping typewriter SFX plays while engine responses reveal character-by-character during streaming and seed load.",
+    "tags": ["ux", "audio"],
     "changes": [
-      "Auto-save history, terminal log, seed code, and end state to localStorage",
-      "Auto-resume on / when a valid save exists (engine-version gated)",
-      "Mid-stream recovery if you quit while waiting for a reply",
-      "New world clears the local save"
+      "Looping typing sound during typewriter reveal (stream + seed/retry)",
+      "public/sounds/response_typing_sound.wav + lib/typingSound.ts",
+      "Stops when on-screen text catches up; syncing label while hidden STATE streams"
+    ]
+  },
+  {
+    "id": "2026-07-10-patch-notes",
+    "version": "0.3.2",
+    "engine": "v3.3",
+    "date": "2026-07-10",
+    "significance": 25,
+    "title": "Public patch notes page",
+    "summary": "Devlog lives in-repo and renders at /patch-notes.",
+    "tags": ["meta"],
+    "linear": ["YAN-262"],
+    "changes": [
+      "New /patch-notes route (CRT styled)",
+      "content/devlog.json is the source of truth — append to publish",
+      "Links from the terminal and gallery"
     ]
   },
   {
@@ -211,6 +220,7 @@
     "version": "0.2.0",
     "engine": "v3.3",
     "date": "2026-07-09",
+    "significance": 85,
     "title": "Branching story, consequences & endings",
     "summary": "Engine v3.3: multi-thread worlds, personas, divergence indicator, lethal combat, rewind/retry.",
     "tags": ["engine", "gameplay"],
@@ -223,10 +233,28 @@
     ]
   },
   {
+    "id": "2026-07-09-save",
+    "version": "0.3.0",
+    "engine": "v3.3",
+    "date": "2026-07-09",
+    "significance": 75,
+    "title": "Local session save & resume",
+    "summary": "Close the tab, crash, or come back later — progress and world seed restore from localStorage.",
+    "tags": ["feature", "persistence"],
+    "linear": ["YAN-239"],
+    "changes": [
+      "Auto-save history, terminal log, seed code, and end state to localStorage",
+      "Auto-resume on / when a valid save exists (engine-version gated)",
+      "Mid-stream recovery if you quit while waiting for a reply",
+      "New world clears the local save"
+    ]
+  },
+  {
     "id": "2026-07-08-seeds",
     "version": "0.1.0",
     "engine": "v3.2",
     "date": "2026-07-08",
+    "significance": 90,
     "title": "Shared world seeds & gallery",
     "summary": "Share a turn-1 world as a numeric seed. Others load the same opening and hidden bible.",
     "tags": ["feature", "seeds"],
