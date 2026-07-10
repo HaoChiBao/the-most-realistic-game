@@ -20,6 +20,11 @@ import {
 } from "@/lib/save";
 import DebugPanel from "@/components/DebugPanel";
 import { makeSeedCode, parseSeedCode } from "@/lib/seed";
+import {
+  preloadTypingSound,
+  startTypingSound,
+  stopTypingSound,
+} from "@/lib/typingSound";
 
 const MAX_INPUT = 90;
 const MAX_CHECKPOINTS = 20;
@@ -186,6 +191,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         let shown = 0;
         let acc = 0;
         let last = 0;
+        startTypingSound();
         const tick = (ts: number) => {
           if (!last) last = ts;
           acc += ((ts - last) / 1000) * TYPE_CPS;
@@ -198,6 +204,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
             scrollToBottom();
           }
           if (shown >= text.length) {
+            stopTypingSound();
             resolve();
             return;
           }
@@ -226,10 +233,12 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     let last = 0;
     let raf = 0;
     let finished = false;
+    let soundStarted = false;
 
     const finish = () => {
       if (finished || myRun !== runIdRef.current) return;
       finished = true;
+      stopTypingSound();
       const cleanScene = received.trim();
       setEntryText(engineId, cleanScene);
 
@@ -280,6 +289,10 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       if (reveal > 0 && shown < received.length) {
         acc -= reveal;
         shown = Math.min(received.length, shown + reveal);
+        if (!soundStarted && shown > 0) {
+          soundStarted = true;
+          startTypingSound();
+        }
         setEntryText(engineId, received.slice(0, shown).trimStart());
         scrollToBottom();
       }
@@ -302,6 +315,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
 
       if (!res.ok || !res.body) {
         if (myRun !== runIdRef.current) return;
+        stopTypingSound();
         const detail = await res.text().catch(() => "");
         setEntries((prev) => prev.filter((e) => e.id !== engineId));
         addEntry("error", detail || `ENGINE ERROR [${res.status}].`);
@@ -334,6 +348,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       streamDone = true;
     } catch (err) {
       cancelAnimationFrame(raf);
+      stopTypingSound();
       if (!finished && myRun === runIdRef.current) {
         setEntries((prev) => prev.filter((e) => e.id !== engineId));
         addEntry("error", `SIGNAL LOST. ${String(err)}`);
@@ -385,6 +400,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
 
   const resetForNewWorld = useCallback(() => {
     runIdRef.current += 1;
+    stopTypingSound();
     clearSession();
     historyRef.current = [];
     checkpointsRef.current = [];
@@ -506,6 +522,11 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     startedRef.current = true;
     void boot();
   }, [boot]);
+
+  useEffect(() => {
+    preloadTypingSound();
+    return () => stopTypingSound();
+  }, []);
 
   useEffect(() => {
     inputRef.current?.focus();

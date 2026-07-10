@@ -1,5 +1,19 @@
 [
   {
+    "id": "2026-07-10-typing-sfx",
+    "version": "0.5.4",
+    "engine": "v5.3",
+    "date": "2026-07-10",
+    "title": "Response typing sound",
+    "summary": "A looping typewriter SFX plays while engine responses reveal character-by-character during streaming and seed load.",
+    "tags": ["ux", "audio"],
+    "changes": [
+      "Looping typing sound during typewriter reveal (stream + seed/retry)",
+      "public/sounds/response_typing_sound.wav + lib/typingSound.ts",
+      "Stops on turn complete, error, or new world"
+    ]
+  },
+  {
     "id": "2026-07-10-v53",
     "version": "0.5.3",
     "engine": "v5.3",
