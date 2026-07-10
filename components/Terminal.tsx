@@ -586,7 +586,16 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     : "what do you do?";
 
   return (
-    <div className="crt" onClick={() => inputRef.current?.focus()}>
+    <div
+      className="crt"
+      onClick={() => {
+        // Don't steal focus after a text selection — focusing the input
+        // clears the highlight immediately.
+        const sel = window.getSelection();
+        if (sel && sel.toString().length > 0) return;
+        inputRef.current?.focus();
+      }}
+    >
       <div className="screen">
         <div className="log" ref={logRef}>
           {entries.map((entry) => (
