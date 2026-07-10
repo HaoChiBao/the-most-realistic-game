@@ -20,6 +20,7 @@ export type SavedSession = {
   entries: SavedEntry[];
   nextEntryId: number;
   ended: boolean;
+  softEnded?: boolean;
   endLabel: string | null;
   worldReady: boolean;
   openingWorld: SavedTurn | null;
@@ -83,6 +84,7 @@ export function buildSessionSnapshot(state: {
   entries: SavedEntry[];
   nextEntryId: number;
   ended: boolean;
+  softEnded?: boolean;
   endLabel: string | null;
   worldReady: boolean;
   openingWorld: SavedTurn | null;
@@ -96,6 +98,7 @@ export function buildSessionSnapshot(state: {
     entries: state.entries.map((e) => ({ ...e })),
     nextEntryId: state.nextEntryId,
     ended: state.ended,
+    softEnded: state.softEnded ?? false,
     endLabel: state.endLabel,
     worldReady: state.worldReady,
     openingWorld: state.openingWorld ? { ...state.openingWorld } : null,

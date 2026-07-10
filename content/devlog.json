@@ -1,0 +1,115 @@
+[
+  {
+    "id": "2026-07-10-m7",
+    "version": "0.4.0",
+    "engine": "v4.0",
+    "date": "2026-07-10",
+    "title": "Structured state, combat realism & living world",
+    "summary": "Engine v4.0: JSON character/inventory/body stats, hard capability ceilings, soft endings so the world continues after the main plot, heat, locations, and open-world chill.",
+    "tags": ["engine", "gameplay", "m7"],
+    "linear": [
+      "YAN-248",
+      "YAN-249",
+      "YAN-250",
+      "YAN-251",
+      "YAN-252",
+      "YAN-253",
+      "YAN-254",
+      "YAN-255",
+      "YAN-256",
+      "YAN-257",
+      "YAN-258",
+      "YAN-259",
+      "YAN-260",
+      "YAN-261"
+    ],
+    "changes": [
+      "STATE JSON every turn: player + NPCs with fixed 0-100 core stats, body map, inventory",
+      "Stats generated when characters appear and updated in the background from interactions",
+      "Hard capability ceilings — plot cannot override physics; no invented kung fu",
+      "Body-part injuries gate sprint, aim, and grapple",
+      "Realistic multi-opponent combat and heat/wanted escalation",
+      "Soft SOFT_END keeps the prompt open after main-plot resolution; hard END for death only",
+      "Location graph + chill exploration; multi-phase plots with aftermath arcs",
+      "Declared abilities for heightened/fantastical worlds only"
+    ]
+  },
+  {
+    "id": "2026-07-10-patch-notes",
+    "version": "0.3.2",
+    "engine": "v3.3",
+    "date": "2026-07-10",
+    "title": "Public patch notes page",
+    "summary": "Devlog lives in-repo and renders at /patch-notes.",
+    "tags": ["meta"],
+    "linear": ["YAN-262"],
+    "changes": [
+      "New /patch-notes route (CRT styled)",
+      "content/devlog.json is the source of truth — append to publish",
+      "Links from the terminal and gallery"
+    ]
+  },
+  {
+    "id": "2026-07-10-ops",
+    "version": "0.3.1",
+    "engine": "v3.3",
+    "date": "2026-07-10",
+    "title": "Rate limits & seed RPC lockdown",
+    "summary": "Hardened the public API so the model key and shared-world table are harder to abuse.",
+    "tags": ["security", "ops"],
+    "linear": ["YAN-216", "YAN-225", "YAN-227"],
+    "changes": [
+      "Per-IP rate limit on /api/game (30/min) with 429 + Retry-After",
+      "Per-IP rate limit on seed create (10/min)",
+      "Seed RPCs executable only via service_role; anon REST returns 401",
+      "SUPABASE_SERVICE_ROLE_KEY required in production"
+    ]
+  },
+  {
+    "id": "2026-07-09-save",
+    "version": "0.3.0",
+    "engine": "v3.3",
+    "date": "2026-07-09",
+    "title": "Local session save & resume",
+    "summary": "Close the tab, crash, or come back later — progress and world seed restore from localStorage.",
+    "tags": ["feature", "persistence"],
+    "linear": ["YAN-239"],
+    "changes": [
+      "Auto-save history, terminal log, seed code, and end state to localStorage",
+      "Auto-resume on / when a valid save exists (engine-version gated)",
+      "Mid-stream recovery if you quit while waiting for a reply",
+      "New world clears the local save"
+    ]
+  },
+  {
+    "id": "2026-07-09-m6",
+    "version": "0.2.0",
+    "engine": "v3.3",
+    "date": "2026-07-09",
+    "title": "Branching story, consequences & endings",
+    "summary": "Engine v3.3: multi-thread worlds, personas, divergence indicator, lethal combat, rewind/retry.",
+    "tags": ["engine", "gameplay"],
+    "linear": ["YAN-230", "YAN-231", "YAN-232", "YAN-233", "YAN-234", "YAN-235", "YAN-236", "YAN-237", "YAN-238"],
+    "changes": [
+      "Extended [WORLD] with MAIN_PLOT, THREADS, CONSEQUENCES, CHARACTERS, END_CLAUSES",
+      "YOUR STORY IS CHANGING divergence line",
+      "Multiple end clauses including death",
+      "Post-end rewind, retry this world, new world"
+    ]
+  },
+  {
+    "id": "2026-07-08-seeds",
+    "version": "0.1.0",
+    "engine": "v3.2",
+    "date": "2026-07-08",
+    "title": "Shared world seeds & gallery",
+    "summary": "Share a turn-1 world as a numeric seed. Others load the same opening and hidden bible.",
+    "tags": ["feature", "seeds"],
+    "linear": ["YAN-219", "YAN-220", "YAN-221", "YAN-222", "YAN-223"],
+    "changes": [
+      "Share world button copies /s/CODE link",
+      "Deep links and most-played gallery",
+      "Supabase-backed worlds table with hardened create_world RPC"
+    ]
+  }
+]

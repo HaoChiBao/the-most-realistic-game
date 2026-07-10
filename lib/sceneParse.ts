@@ -1,12 +1,14 @@
 // Parse raw engine output into the visible scene and control tokens.
 
 export const END_TOKEN = "<END>";
+export const SOFT_END_TOKEN = "<SOFT_END>";
 export const DIVERGE_TOKEN = "<DIVERGE>";
 const ENDLABEL_RE = /<ENDLABEL>([\s\S]*?)<\/ENDLABEL>/i;
 
 export type ParsedScene = {
   scene: string;
   ended: boolean;
+  softEnded: boolean;
   diverged: boolean;
   endLabel: string | null;
 };
@@ -41,6 +43,13 @@ export function parseScene(raw: string): ParsedScene {
     text = text.replace(ENDLABEL_RE, "");
   }
 
+  let softEnded = false;
+  const softIdx = text.indexOf(SOFT_END_TOKEN);
+  if (softIdx !== -1) {
+    softEnded = true;
+    text = text.slice(0, softIdx) + text.slice(softIdx + SOFT_END_TOKEN.length);
+  }
+
   let ended = false;
   const endIdx = text.indexOf(END_TOKEN);
   if (endIdx !== -1) {
@@ -48,13 +57,17 @@ export function parseScene(raw: string): ParsedScene {
     text = text.slice(0, endIdx);
   }
 
-  return { scene: text.trim(), ended, diverged, endLabel };
+  // Hard end wins if both somehow appear.
+  if (ended) softEnded = false;
+
+  return { scene: text.trim(), ended, softEnded, diverged, endLabel };
 }
 
 // Strip control tokens before storing assistant turns in history.
 export function stripControlTokens(raw: string): string {
   return raw
     .replace(END_TOKEN, "")
+    .replace(SOFT_END_TOKEN, "")
     .split(DIVERGE_TOKEN)
     .join("")
     .replace(ENDLABEL_RE, "")

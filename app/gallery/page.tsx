@@ -40,9 +40,14 @@ export default function GalleryPage() {
       <div className="screen">
         <div className="gallery-head">
           <span>SHARED WORLDS  //  MOST PLAYED</span>
-          <a className="restart" href="/">
-            new world
-          </a>
+          <span className="patch-head-links">
+            <a className="restart" href="/patch-notes">
+              patch notes
+            </a>
+            <a className="restart" href="/">
+              new world
+            </a>
+          </span>
         </div>
 
         <div className="gallery-body">
@@ -74,9 +79,14 @@ export default function GalleryPage() {
 
         <div className="meta">
           <span>THE MOST REALISTIC GAME</span>
-          <a className="restart" href="/">
-            back to terminal
-          </a>
+          <span className="controls">
+            <a className="restart" href="/patch-notes" style={{ marginLeft: 12 }}>
+              patch notes
+            </a>
+            <a className="restart" href="/" style={{ marginLeft: 12 }}>
+              back to terminal
+            </a>
+          </span>
         </div>
       </div>
     </div>

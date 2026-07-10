@@ -70,6 +70,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const [busy, setBusy] = useState(false);
   const [booted, setBooted] = useState(false);
   const [ended, setEnded] = useState(false);
+  const [softEnded, setSoftEnded] = useState(false);
   const [endLabel, setEndLabel] = useState<string | null>(null);
   const [worldReady, setWorldReady] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -84,6 +85,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const seedRef = useRef<string | null>(seedCode ?? null);
   const entriesRef = useRef<Entry[]>([]);
   const endedRef = useRef(false);
+  const softEndedRef = useRef(false);
   const endLabelRef = useRef<string | null>(null);
   const worldReadyRef = useRef(false);
 
@@ -98,6 +100,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         entries: entriesRef.current,
         nextEntryId: idRef.current,
         ended: endedRef.current,
+        softEnded: softEndedRef.current,
         endLabel: endLabelRef.current,
         worldReady: worldReadyRef.current,
         openingWorld: openingWorldRef.current,
@@ -117,6 +120,10 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   useEffect(() => {
     endedRef.current = ended;
   }, [ended]);
+
+  useEffect(() => {
+    softEndedRef.current = softEnded;
+  }, [softEnded]);
 
   useEffect(() => {
     endLabelRef.current = endLabel;
@@ -202,6 +209,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     let received = "";
     let rawFull = "";
     let sawEnd = false;
+    let sawSoftEnd = false;
     let sawDiverge = false;
     let divergeShown = false;
     let label: string | null = null;
@@ -234,9 +242,22 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       if (sawEnd) {
         setEndLabel(label);
         setEnded(true);
+        setSoftEnded(false);
         endLabelRef.current = label;
         endedRef.current = true;
+        softEndedRef.current = false;
         addEntry("system", label ? `— ${label} —` : "— THE WORLD GOES DARK —");
+      } else if (sawSoftEnd) {
+        setEndLabel(label);
+        setSoftEnded(true);
+        endLabelRef.current = label;
+        softEndedRef.current = true;
+        addEntry(
+          "system",
+          label
+            ? `— ${label} —  //  THE WORLD CONTINUES`
+            : "— A CHAPTER CLOSES —  //  THE WORLD CONTINUES"
+        );
       }
 
       setBusy(false);
@@ -290,6 +311,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         const parsed = parseScene(rawFull);
         received = parsed.scene;
         sawEnd = parsed.ended;
+        sawSoftEnd = parsed.softEnded;
         if (parsed.diverged) sawDiverge = true;
         if (parsed.endLabel) label = parsed.endLabel;
         if (parsed.diverged && !divergeShown) {
@@ -347,12 +369,12 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   );
 
   const boot = useCallback(async () => {
-    let engineLine = "REALITY ENGINE v3.3  //  ONLINE";
+    let engineLine = "REALITY ENGINE v4.0  //  ONLINE";
     try {
       const res = await fetch("/api/engine");
       if (res.ok) {
         const data = await res.json();
-        const ver = data.version ?? "v3.3";
+        const ver = data.version ?? "v4.0";
         const banner = data.banner ?? "ONLINE";
         engineLine = `REALITY ENGINE ${ver}  //  ${banner}`;
       }
@@ -384,6 +406,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       entriesRef.current = restoredEntries;
       setEnded(saved.ended);
       endedRef.current = saved.ended;
+      setSoftEnded(Boolean(saved.softEnded));
+      softEndedRef.current = Boolean(saved.softEnded);
       setEndLabel(saved.endLabel);
       endLabelRef.current = saved.endLabel;
       setWorldReady(saved.worldReady);
@@ -434,12 +458,16 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       if (!value || busy || ended || !booted) return;
       saveCheckpoint();
       setInput("");
+      if (softEnded) {
+        setSoftEnded(false);
+        softEndedRef.current = false;
+      }
       addEntry("player", value);
       historyRef.current.push({ role: "user", content: value });
       persistSession();
       await streamTurn();
     },
-    [input, busy, ended, booted, addEntry, streamTurn, saveCheckpoint, persistSession]
+    [input, busy, ended, booted, softEnded, addEntry, streamTurn, saveCheckpoint, persistSession]
   );
 
   const shareWorld = useCallback(async () => {
@@ -507,7 +535,11 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     setEntries([]);
     setInput("");
     setEnded(false);
+    setSoftEnded(false);
     setEndLabel(null);
+    endedRef.current = false;
+    softEndedRef.current = false;
+    endLabelRef.current = null;
     setWorldReady(false);
     setBooted(true);
     historyRef.current.push({ ...opening });
@@ -528,8 +560,10 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     setEntries(cp.entries.map((e) => ({ ...e })));
     idRef.current = cp.entries.reduce((m, e) => Math.max(m, e.id), 0);
     setEnded(false);
+    setSoftEnded(false);
     setEndLabel(null);
     endedRef.current = false;
+    softEndedRef.current = false;
     endLabelRef.current = null;
     setInput("");
     focusInput();
@@ -544,6 +578,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     ? "loading the world... you can start typing"
     : busy
     ? "type your next move... it sends when the world settles"
+    : softEnded
+    ? "the world continues — what do you do?"
     : "what do you do?";
 
   return (
@@ -607,6 +643,26 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
             {ended && endLabel && (
               <span className="end-label">{endLabel}</span>
             )}
+            {!ended && softEnded && endLabel && (
+              <span className="end-label">{endLabel}</span>
+            )}
+            {!ended && softEnded && (
+              <button
+                className="restart"
+                onClick={() => {
+                  setSoftEnded(false);
+                  softEndedRef.current = false;
+                  setEndLabel(null);
+                  endLabelRef.current = null;
+                  persistSession();
+                  focusInput();
+                }}
+                disabled={busy}
+                style={{ marginLeft: 12 }}
+              >
+                continue
+              </button>
+            )}
             <button
               className="restart"
               onClick={shareWorld}
@@ -617,6 +673,9 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
             </button>
             <a className="restart" href="/gallery" style={{ marginLeft: 12 }}>
               worlds
+            </a>
+            <a className="restart" href="/patch-notes" style={{ marginLeft: 12 }}>
+              patch notes
             </a>
             {!ended && (
               <button
