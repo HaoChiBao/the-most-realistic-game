@@ -210,7 +210,7 @@ export function buildDebugSections(opts: {
         player_location: s.player_location,
         locations: s.locations,
       }],
-      ["main-plot", "11 · Main plot", s.main_plot],
+      ["starting-plot", "11 · Starting plot", s.starting_plot ?? s.main_plot],
       ["threads", "12 · Threads", s.threads],
       ["consequences", "13 · Consequences", s.consequences],
       ["end-clauses", "14 · End clauses / end_state", {

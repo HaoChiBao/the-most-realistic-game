@@ -1,11 +1,26 @@
 [
   {
+    "id": "2026-07-10-starting-plot",
+    "version": "0.4.1",
+    "engine": "v4.1",
+    "date": "2026-07-10",
+    "title": "Starting plot, not main plot",
+    "summary": "Renames the seeded tension to starting_plot and tells the engine not to railroad players back onto it.",
+    "tags": ["engine", "gameplay"],
+    "changes": [
+      "STATE key main_plot → starting_plot; active_track default starting",
+      "Soft-end label STARTING PLOT RESOLVED (never MAIN PLOT)",
+      "Explicit no-railroad rules: chill exploration is first-class; ambient nudges are not plot magnets",
+      "Engine version bump to v4.1 (invalidates v4.0 local saves)"
+    ]
+  },
+  {
     "id": "2026-07-10-m7",
     "version": "0.4.0",
     "engine": "v4.0",
     "date": "2026-07-10",
     "title": "Structured state, combat realism & living world",
-    "summary": "Engine v4.0: JSON character/inventory/body stats, hard capability ceilings, soft endings so the world continues after the main plot, heat, locations, and open-world chill.",
+    "summary": "Engine v4.0: JSON character/inventory/body stats, hard capability ceilings, soft endings so the world continues after the starting plot, heat, locations, and open-world chill.",
     "tags": ["engine", "gameplay", "m7"],
     "linear": [
       "YAN-248",
@@ -29,7 +44,7 @@
       "Hard capability ceilings — plot cannot override physics; no invented kung fu",
       "Body-part injuries gate sprint, aim, and grapple",
       "Realistic multi-opponent combat and heat/wanted escalation",
-      "Soft SOFT_END keeps the prompt open after main-plot resolution; hard END for death only",
+      "Soft SOFT_END keeps the prompt open after starting-plot resolution; hard END for death only",
       "Location graph + chill exploration; multi-phase plots with aftermath arcs",
       "Declared abilities for heightened/fantastical worlds only"
     ]

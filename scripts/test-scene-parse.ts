@@ -5,11 +5,11 @@ function assert(cond: unknown, msg: string): asserts cond {
 }
 
 const soft = parseScene(
-  "[SCENE]\nThe blast fades.\n<ENDLABEL>MAIN PLOT COMPLETED</ENDLABEL><SOFT_END>\n[WORLD]\nSTATE\n{}"
+  "[SCENE]\nThe blast fades.\n<ENDLABEL>STARTING PLOT RESOLVED</ENDLABEL><SOFT_END>\n[WORLD]\nSTATE\n{}"
 );
 assert(soft.softEnded === true, "expected softEnded");
 assert(soft.ended === false, "soft end must not hard-end");
-assert(soft.endLabel === "MAIN PLOT COMPLETED", "soft label");
+assert(soft.endLabel === "STARTING PLOT RESOLVED", "soft label");
 assert(!soft.scene.includes("SOFT_END"), "token stripped from scene");
 
 const hard = parseScene(

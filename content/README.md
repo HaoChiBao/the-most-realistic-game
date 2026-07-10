@@ -11,8 +11,8 @@ Edit [`content/devlog.json`](../content/devlog.json). Newest entries should be l
 ```json
 {
   "id": "unique-slug",
-  "version": "0.4.0",
-  "engine": "v4.0",
+  "version": "0.4.1",
+  "engine": "v4.1",
   "date": "2026-07-15",
   "title": "Short headline",
   "summary": "One or two sentences for players.",
