@@ -1,6 +1,21 @@
 [
   {
-    "id": "2026-07-10-m8",
+    "id": "2026-07-10-v53",
+    "version": "0.5.3",
+    "engine": "v5.3",
+    "date": "2026-07-10",
+    "title": "Conditions, story debug & hybrid randomness",
+    "summary": "Broad condition families tick every turn. Server rolls random table+tier; model narrates. Full story and randomness observability in debug.",
+    "tags": ["engine", "conditions", "randomness", "debug"],
+    "changes": [
+      "7 condition kinds (trauma, exposure, toxicity, asphyxia, exhaustion, distress, restraint)",
+      "Hybrid randomness: server roll injected per player turn; hazard/discovery/social/ambient tiers",
+      "chaos baseline derived from seed tone + npc_agency",
+      "Debug: stories, conditions, random roll, LLM payload sections",
+      "Engine version bump to v5.3"
+    ]
+  },
+  {
     "version": "0.5.0",
     "engine": "v5.0",
     "date": "2026-07-10",

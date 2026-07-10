@@ -1,5 +1,34 @@
 /** Extract and organize engine debug dumps from session history. */
 
+import {
+  annotateGameMessages,
+  buildGameMessages,
+} from "@/lib/gameMessages";
+import {
+  extractConditionsFromState,
+  formatConditionsGuide,
+  formatConditionsOverview,
+} from "@/lib/conditions";
+import {
+  extractStoriesFromState,
+  extractStoryPromptExcerpts,
+  formatStoriesOverview,
+  formatStoryStorageGuide,
+} from "@/lib/storyDebug";
+import {
+  extractRandomnessFromState,
+  formatRandomnessGuide,
+  formatRollOverview,
+} from "@/lib/randomness";
+import { resolveRollForHistory } from "@/lib/rollContext";
+import {
+  extractSceneBlock,
+  extractStateJson,
+  extractWorldBlock,
+} from "@/lib/stateParse";
+
+export { extractStateJson } from "@/lib/stateParse";
+
 export type DebugSection = {
   id: string;
   title: string;
@@ -23,88 +52,6 @@ export type SessionDebugMeta = {
 
 type Turn = { role: "user" | "assistant"; content: string };
 
-function extractWorldBlock(content: string): string | null {
-  const m = content.match(/\[\s*WORLD\s*\]/i);
-  if (!m || m.index === undefined) return null;
-  return content.slice(m.index + m[0].length).trim();
-}
-
-function extractSceneBlock(content: string): string | null {
-  const sceneM = content.match(/\[\s*SCENE\s*\]/i);
-  const worldM = content.match(/\[\s*WORLD\s*\]/i);
-  if (!sceneM || sceneM.index === undefined) {
-    if (worldM && worldM.index !== undefined) {
-      return content.slice(0, worldM.index).trim() || null;
-    }
-    return null;
-  }
-  const start = sceneM.index + sceneM[0].length;
-  const end =
-    worldM && worldM.index !== undefined && worldM.index > sceneM.index
-      ? worldM.index
-      : content.length;
-  return content.slice(start, end).trim() || null;
-}
-
-/** Pull the JSON object after a bare `STATE` line inside [WORLD]. */
-export function extractStateJson(worldOrRaw: string): unknown | null {
-  const world = extractWorldBlock(worldOrRaw) ?? worldOrRaw;
-  const stateLine = world.match(/(?:^|\n)\s*STATE\s*\n/i);
-  if (!stateLine || stateLine.index === undefined) {
-    // Fallback: first top-level JSON object in the block
-    const brace = world.indexOf("{");
-    if (brace === -1) return null;
-    return tryParseJsonObject(world.slice(brace));
-  }
-  const after = world.slice(stateLine.index + stateLine[0].length);
-  const brace = after.indexOf("{");
-  if (brace === -1) return null;
-  return tryParseJsonObject(after.slice(brace));
-}
-
-function tryParseJsonObject(src: string): unknown | null {
-  // Walk braces to find a balanced object (model may append notes after JSON).
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-  for (let i = 0; i < src.length; i++) {
-    const ch = src[i];
-    if (inString) {
-      if (escape) {
-        escape = false;
-        continue;
-      }
-      if (ch === "\\") {
-        escape = true;
-        continue;
-      }
-      if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      continue;
-    }
-    if (ch === "{") depth++;
-    else if (ch === "}") {
-      depth--;
-      if (depth === 0) {
-        const slice = src.slice(0, i + 1);
-        try {
-          return JSON.parse(slice);
-        } catch {
-          return null;
-        }
-      }
-    }
-  }
-  try {
-    return JSON.parse(src);
-  } catch {
-    return null;
-  }
-}
-
 function pretty(value: unknown): string {
   try {
     return JSON.stringify(value, null, 2);
@@ -120,6 +67,13 @@ function lastAssistant(history: Turn[]): Turn | null {
   return null;
 }
 
+function firstAssistant(history: Turn[]): Turn | null {
+  for (const t of history) {
+    if (t.role === "assistant") return t;
+  }
+  return null;
+}
+
 export function buildDebugSections(opts: {
   history: Turn[];
   meta: SessionDebugMeta;
@@ -127,6 +81,7 @@ export function buildDebugSections(opts: {
   openingInstruction: string | null;
   worldSpecJson?: string | null;
   seedDialTable?: string | null;
+  seedCode?: string | null;
 }): DebugSection[] {
   const {
     history,
@@ -135,6 +90,7 @@ export function buildDebugSections(opts: {
     openingInstruction,
     worldSpecJson,
     seedDialTable,
+    seedCode = meta.seedCode,
   } = opts;
   const sections: DebugSection[] = [];
 
@@ -193,6 +149,60 @@ export function buildDebugSections(opts: {
     });
   }
 
+  if (systemPrompt) {
+    sections.push({
+      id: "story-prompt-rules",
+      title: seedDialTable ? "06 · Story rules (prompt excerpts)" : "04 · Story rules (prompt excerpts)",
+      kind: "prompt",
+      body: extractStoryPromptExcerpts(systemPrompt),
+    });
+  }
+
+  sections.push({
+    id: "story-storage-guide",
+    title: seedDialTable ? "07 · Stories — storage & prompt flow" : "05 · Stories — storage & prompt flow",
+    kind: "text",
+    body: formatStoryStorageGuide(),
+  });
+
+  sections.push({
+    id: "conditions-guide",
+    title: seedDialTable ? "08 · Conditions — kinds & death paths" : "06 · Conditions — kinds & death paths",
+    kind: "text",
+    body: formatConditionsGuide(),
+  });
+
+  sections.push({
+    id: "randomness-guide",
+    title: seedDialTable ? "09 · Randomness — hybrid rolls" : "07 · Randomness — hybrid rolls",
+    kind: "text",
+    body: formatRandomnessGuide(),
+  });
+
+  const pendingRoll = resolveRollForHistory(history, seedCode);
+  sections.push({
+    id: "random-roll",
+    title: seedDialTable ? "10 · Random roll (next turn)" : "08 · Random roll (next turn)",
+    kind: "text",
+    body: pendingRoll
+      ? `${formatRollOverview(pendingRoll)}\n\n--- prompt block ---\n${pendingRoll.prompt_block}`
+      : "(no player action yet — roll fires after first command)",
+  });
+
+  const payloadMessages = buildGameMessages(history, seedCode, pendingRoll);
+  const payloadNotes = annotateGameMessages(payloadMessages);
+  sections.push({
+    id: "llm-payload",
+    title: seedDialTable ? "11 · LLM payload (next request)" : "09 · LLM payload (next request)",
+    kind: "json",
+    body: pretty({
+      note: "Messages sent on the next /api/game call. Only the latest assistant turn keeps [WORLD]/STATE (stories). Older assistant turns are SCENE-only.",
+      message_count: payloadMessages.length,
+      messages: payloadNotes,
+      full_messages: payloadMessages,
+    }),
+  });
+
   const last = lastAssistant(history);
   let sectionNum = sections.length;
   const nextTitle = (label: string) => {
@@ -237,12 +247,95 @@ export function buildDebugSections(opts: {
       : "(could not parse STATE JSON — see raw WORLD above)",
   });
 
+  const storyBundle = state ? extractStoriesFromState(state) : null;
+  sections.push({
+    id: "stories-overview",
+    title: nextTitle("Stories (current turn overview)"),
+    kind: "text",
+    body: formatStoriesOverview(storyBundle, { label: "LATEST STATE" }),
+  });
+
+  const conditionBundle = state ? extractConditionsFromState(state) : null;
+  const randomBundle = state ? extractRandomnessFromState(state) : null;
+  sections.push({
+    id: "conditions-overview",
+    title: nextTitle("Conditions (active overview)"),
+    kind: "text",
+    body: formatConditionsOverview(
+      conditionBundle ?? { player: [], npc: [], all: [] }
+    ),
+  });
+
+  sections.push({
+    id: "conditions-json",
+    title: nextTitle("Conditions (JSON)"),
+    kind: "json",
+    body: conditionBundle
+      ? pretty({
+          top_level: (state as Record<string, unknown>)?.conditions ?? [],
+          player: (state as Record<string, unknown>)?.player
+            ? ((state as Record<string, unknown>).player as Record<string, unknown>)
+                .conditions ?? []
+            : [],
+          by_subject: {
+            player: conditionBundle.player,
+            npcs: conditionBundle.npc,
+          },
+          all: conditionBundle.all,
+        })
+      : "(no conditions — STATE missing or unparseable)",
+  });
+
+  sections.push({
+    id: "randomness-state",
+    title: nextTitle("Randomness (STATE log)"),
+    kind: "json",
+    body: randomBundle
+      ? pretty(randomBundle)
+      : "(no randomness state yet)",
+  });
+
+  sections.push({
+    id: "stories-json",
+    title: nextTitle("Stories (JSON bundle)"),
+    kind: "json",
+    body: storyBundle
+      ? pretty(storyBundle)
+      : "(no story bundle — STATE missing or unparseable)",
+  });
+
+  const first = firstAssistant(history);
+  const firstState = first ? extractStateJson(first.content) : null;
+  const firstStories = firstState ? extractStoriesFromState(firstState) : null;
+  if (firstStories && first !== last) {
+    sections.push({
+      id: "stories-at-gen",
+      title: nextTitle("Stories at gen (turn 1 STATE)"),
+      kind: "text",
+      body: formatStoriesOverview(firstStories, {
+        label: "TURN 1 / SHARE BIBLE",
+        turnHint: " — seeded at world creation",
+      }),
+    });
+    sections.push({
+      id: "stories-at-gen-json",
+      title: nextTitle("Stories at gen (JSON)"),
+      kind: "json",
+      body: pretty(firstStories),
+    });
+  }
+
   if (state && typeof state === "object" && state !== null) {
     const s = state as Record<string, unknown>;
     const slices: [string, string, unknown][] = [
       ["player", "Player", s.player],
       ["characters", "Characters", s.characters],
       ["laws", "Laws (discoverable)", s.laws],
+      ["conditions-slice", "Conditions (raw slices)", {
+        conditions: s.conditions,
+        player_conditions: (s.player as Record<string, unknown> | undefined)
+          ?.conditions,
+      }],
       ["heat", "Heat / wanted", s.heat],
       ["locations", "Locations", {
         player_location: s.player_location,

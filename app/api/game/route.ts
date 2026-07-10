@@ -1,12 +1,12 @@
 import { NextRequest } from "next/server";
-import { SYSTEM_PROMPT, OPENING_INSTRUCTION } from "@/lib/systemPrompt";
+import { buildGameMessages } from "@/lib/gameMessages";
 import { getLlmConfig } from "@/lib/llm";
+import { resolveRollForHistory } from "@/lib/rollContext";
 import {
   clientIp,
   rateLimit,
   rateLimitHeaders,
 } from "@/lib/rateLimit";
-import { buildOpeningInstruction, decodeSeed } from "@/lib/worldSpec";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,48 +18,7 @@ const GAME_RATE_LIMIT = 30;
 const GAME_RATE_WINDOW_MS = 60_000;
 const MAX_TURNS_PER_REQUEST = MAX_HISTORY;
 
-type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 type ClientTurn = { role: "user" | "assistant"; content: string };
-
-function stripWorld(content: string): string {
-  const idx = content.indexOf("[WORLD]");
-  const scene = idx === -1 ? content : content.slice(0, idx);
-  return scene.replace("[SCENE]", "").trim();
-}
-
-function buildMessages(
-  history: ClientTurn[],
-  seedCode?: string | null
-): ChatMessage[] {
-  const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
-
-  const trimmed = history.slice(-MAX_HISTORY);
-  if (trimmed.length === 0 || trimmed[0].role !== "user") {
-    const spec = seedCode ? decodeSeed(seedCode) : null;
-    messages.push({
-      role: "user",
-      content: buildOpeningInstruction(OPENING_INSTRUCTION, spec),
-    });
-  }
-
-  let lastAssistant = -1;
-  for (let i = 0; i < trimmed.length; i++) {
-    if (trimmed[i].role === "assistant") lastAssistant = i;
-  }
-
-  for (let i = 0; i < trimmed.length; i++) {
-    const turn = trimmed[i];
-    let content = String(turn.content ?? "");
-    if (turn.role === "assistant" && i !== lastAssistant) {
-      content = stripWorld(content);
-    }
-    content = content.slice(0, 8000);
-    if (!content) continue;
-    messages.push({ role: turn.role, content });
-  }
-
-  return messages;
-}
 
 export async function POST(req: NextRequest) {
   const ip = clientIp(req);
@@ -122,7 +81,14 @@ export async function POST(req: NextRequest) {
         : t
     );
 
-  const messages = buildMessages(history, seedCode);
+  const roll = resolveRollForHistory(history, seedCode);
+  const messages = buildGameMessages(history, seedCode, roll);
+
+  const rollHeader = roll
+    ? roll.fired
+      ? `${roll.table}/${roll.tier}`
+      : "none"
+    : "opening";
 
   let upstream: Response;
   try {
@@ -211,6 +177,7 @@ export async function POST(req: NextRequest) {
       "Content-Type": "text/plain; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       "X-Accel-Buffering": "no",
+      "X-Random-Roll": rollHeader,
       ...rateLimitHeaders(limited),
     },
   });
