@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { buildGameMessages } from "@/lib/gameMessages";
+import { buildGameMessages, MAX_HISTORY_MESSAGES } from "@/lib/gameMessages";
 import { getLlmConfig } from "@/lib/llm";
 import { resolveRollForHistory } from "@/lib/rollContext";
 import {
@@ -12,11 +12,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_INPUT_CHARS = 140;
-const MAX_HISTORY = 40;
 /** Soft per-IP cap so a public LLM key isn't drained by a single client. */
 const GAME_RATE_LIMIT = 30;
 const GAME_RATE_WINDOW_MS = 60_000;
-const MAX_TURNS_PER_REQUEST = MAX_HISTORY;
+/** Reject only abusive payloads — normal play trims to MAX_HISTORY_MESSAGES. */
+const MAX_HISTORY_PAYLOAD = 200;
 
 type ClientTurn = { role: "user" | "assistant"; content: string };
 
@@ -56,19 +56,16 @@ export async function POST(req: NextRequest) {
   }
 
   const rawHistory = Array.isArray(body.history) ? body.history : [];
-  if (rawHistory.length > MAX_TURNS_PER_REQUEST + 10) {
+  if (rawHistory.length > MAX_HISTORY_PAYLOAD) {
     return new Response("SESSION TOO LONG. Start a new world.", {
       status: 400,
       headers: rateLimitHeaders(limited),
     });
   }
 
-  const seedCode =
-    typeof body.seedCode === "string" && /^\d{10,14}$/.test(body.seedCode.trim())
-      ? body.seedCode.trim()
-      : null;
+  const cappedHistory = rawHistory.slice(-MAX_HISTORY_MESSAGES);
 
-  const history: ClientTurn[] = rawHistory
+  const history: ClientTurn[] = cappedHistory
     .filter(
       (t): t is ClientTurn =>
         t &&
@@ -80,6 +77,11 @@ export async function POST(req: NextRequest) {
         ? { role: "user", content: t.content.slice(0, MAX_INPUT_CHARS) }
         : t
     );
+
+  const seedCode =
+    typeof body.seedCode === "string" && /^\d{10,14}$/.test(body.seedCode.trim())
+      ? body.seedCode.trim()
+      : null;
 
   const roll = resolveRollForHistory(history, seedCode);
   const messages = buildGameMessages(history, seedCode, roll);

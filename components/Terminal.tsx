@@ -19,6 +19,7 @@ import {
   loadSession,
   saveSession,
 } from "@/lib/save";
+import { MAX_HISTORY_MESSAGES } from "@/lib/gameMessages";
 import DebugPanel from "@/components/DebugPanel";
 import { makeSeedCode, parseSeedCode } from "@/lib/seed";
 import {
@@ -375,7 +376,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          history: historyRef.current,
+          history: historyRef.current.slice(-MAX_HISTORY_MESSAGES),
           seedCode: seedRef.current,
         }),
       });

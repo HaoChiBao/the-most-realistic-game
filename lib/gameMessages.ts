@@ -6,6 +6,8 @@ export type ChatMessage = { role: "system" | "user" | "assistant"; content: stri
 export type ClientTurn = { role: "user" | "assistant"; content: string };
 
 const MAX_HISTORY = 40;
+/** Exported for API route + client — LLM only ever sees this many turns. */
+export const MAX_HISTORY_MESSAGES = MAX_HISTORY;
 
 export function stripWorld(content: string): string {
   const idx = content.indexOf("[WORLD]");
