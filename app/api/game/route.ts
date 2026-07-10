@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { buildGameMessages, MAX_HISTORY_MESSAGES } from "@/lib/gameMessages";
 import { getLlmConfig } from "@/lib/llm";
+import { resolveCombatEscalation } from "@/lib/combatContext";
 import { resolveRollForHistory } from "@/lib/rollContext";
 import {
   clientIp,
@@ -84,7 +85,8 @@ export async function POST(req: NextRequest) {
       : null;
 
   const roll = resolveRollForHistory(history, seedCode);
-  const messages = buildGameMessages(history, seedCode, roll);
+  const combat = resolveCombatEscalation(history);
+  const messages = buildGameMessages(history, seedCode, roll, combat);
 
   const rollHeader = roll
     ? roll.fired

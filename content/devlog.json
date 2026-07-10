@@ -1,5 +1,40 @@
 [
   {
+    "id": "2026-07-10-combat-escalation",
+    "version": "0.5.9",
+    "engine": "v5.7",
+    "date": "2026-07-10",
+    "significance": 90,
+    "title": "Combat escalation — guards fight back, no plot nudges mid-fight",
+    "summary": "Server injects a mandatory fight-resolution block when you keep attacking a passive NPC. No more smoke/murmur hooks during brawls.",
+    "tags": ["engine", "gameplay", "npc", "combat"],
+    "changes": [
+      "[COMBAT ESCALATION — server authoritative] fires after sustained assault or passive guard loops",
+      "Banned passive fight phrases; trained authority must win by takedown/KO/relocation",
+      "Active combat: zero ambient nudges, no pivot to mysteries when player asks mid-fight",
+      "Debug panel: Combat escalation (next turn) section",
+      "Engine version bump to v5.7"
+    ]
+  },
+  {
+    "id": "2026-07-10-npc-registry",
+    "version": "0.5.8",
+    "engine": "v5.6",
+    "date": "2026-07-10",
+    "significance": 88,
+    "title": "NPC registry & realistic combat agency",
+    "summary": "Every person you meet gets a tracked persona in STATE. NPCs fight back — trained guards win fights instead of passively absorbing punches.",
+    "tags": ["engine", "gameplay", "npc"],
+    "changes": [
+      "characters[] expanded: personality, memory[], disposition, combat_posture, training, authority_level",
+      "Rule: any human in [SCENE] gets a sheet same turn (plot cast or passerby)",
+      "NPC COMBAT & SELF-DEFENSE: no passive punching bags; authority wins vs untrained player",
+      "Realistic outcomes: restraint, knockout, relocation, lethal force, hard END",
+      "Debug panel: Characters overview + JSON roster + prompt excerpts",
+      "Engine version bump to v5.6"
+    ]
+  },
+  {
     "id": "2026-07-10-patch-day-group",
     "version": "0.5.7",
     "engine": "v5.5",

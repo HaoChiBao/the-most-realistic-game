@@ -10,6 +10,12 @@ import {
   formatConditionsOverview,
 } from "@/lib/conditions";
 import {
+  extractCharactersFromState,
+  extractCharacterPromptExcerpts,
+  formatCharacterStorageGuide,
+  formatCharactersOverview,
+} from "@/lib/characterDebug";
+import {
   extractStoriesFromState,
   extractStoryPromptExcerpts,
   formatStoriesOverview,
@@ -20,6 +26,7 @@ import {
   formatRandomnessGuide,
   formatRollOverview,
 } from "@/lib/randomness";
+import { resolveCombatEscalation } from "@/lib/combatContext";
 import { resolveRollForHistory } from "@/lib/rollContext";
 import {
   extractSceneBlock,
@@ -193,13 +200,21 @@ export function buildDebugSections(opts: {
   });
 
   sections.push({
+    id: "character-storage-guide",
+    title: seedDialTable ? "10 · Characters — storage & combat rules" : "08 · Characters — storage & combat rules",
+    kind: "text",
+    body: formatCharacterStorageGuide(),
+  });
+
+  sections.push({
     id: "randomness-guide",
-    title: seedDialTable ? "09 · Randomness — hybrid rolls" : "07 · Randomness — hybrid rolls",
+    title: seedDialTable ? "11 · Randomness — hybrid rolls" : "09 · Randomness — hybrid rolls",
     kind: "text",
     body: formatRandomnessGuide(),
   });
 
   const pendingRoll = resolveRollForHistory(history, seedCode);
+  const pendingCombat = resolveCombatEscalation(history);
   sections.push({
     id: "random-roll",
     title: seedDialTable ? "10 · Random roll (next turn)" : "08 · Random roll (next turn)",
@@ -209,7 +224,21 @@ export function buildDebugSections(opts: {
       : "(no player action yet — roll fires after first command)",
   });
 
-  const payloadMessages = buildGameMessages(history, seedCode, pendingRoll);
+  sections.push({
+    id: "combat-escalation",
+    title: seedDialTable ? "11 · Combat escalation (next turn)" : "09 · Combat escalation (next turn)",
+    kind: "text",
+    body: pendingCombat?.fired
+      ? `FIRED — attack_streak=${pendingCombat.attack_streak} passive_last=${pendingCombat.passive_last_scene}\ntarget=${pendingCombat.target_npc_name} (${pendingCombat.target_npc_id}) combat ${pendingCombat.npc_combat} vs player ${pendingCombat.player_combat}\n\n--- prompt block ---\n${pendingCombat.prompt_block}`
+      : "(not active — fires during sustained assault vs passive NPC narration)",
+  });
+
+  const payloadMessages = buildGameMessages(
+    history,
+    seedCode,
+    pendingRoll,
+    pendingCombat
+  );
   const payloadNotes = annotateGameMessages(payloadMessages);
   sections.push({
     id: "llm-payload",
@@ -267,7 +296,33 @@ export function buildDebugSections(opts: {
       : "(could not parse STATE JSON — see raw WORLD above)",
   });
 
+  if (systemPrompt) {
+    sections.push({
+      id: "character-prompt-rules",
+      title: seedDialTable ? "12 · Character rules (prompt excerpts)" : "10 · Character rules (prompt excerpts)",
+      kind: "prompt",
+      body: extractCharacterPromptExcerpts(systemPrompt),
+    });
+  }
+
   const storyBundle = state ? extractStoriesFromState(state) : null;
+  const characterBundle = state ? extractCharactersFromState(state) : null;
+  sections.push({
+    id: "characters-overview",
+    title: nextTitle("Characters (current turn overview)"),
+    kind: "text",
+    body: formatCharactersOverview(characterBundle, { label: "LATEST STATE" }),
+  });
+
+  sections.push({
+    id: "characters-json",
+    title: nextTitle("Characters (JSON roster)"),
+    kind: "json",
+    body: characterBundle
+      ? pretty(characterBundle.characters)
+      : "(no characters — STATE missing or unparseable)",
+  });
+
   sections.push({
     id: "stories-overview",
     title: nextTitle("Stories (current turn overview)"),

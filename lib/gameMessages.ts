@@ -1,5 +1,6 @@
 import { OPENING_INSTRUCTION, SYSTEM_PROMPT } from "@/lib/systemPrompt";
 import type { RandomRollResult } from "@/lib/randomness";
+import type { CombatEscalationResult } from "@/lib/combatContext";
 import { buildOpeningInstruction, decodeSeed } from "@/lib/worldSpec";
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
@@ -19,7 +20,8 @@ export function stripWorld(content: string): string {
 export function buildGameMessages(
   history: ClientTurn[],
   seedCode?: string | null,
-  roll?: RandomRollResult | null
+  roll?: RandomRollResult | null,
+  combat?: CombatEscalationResult | null
 ): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
 
@@ -44,12 +46,16 @@ export function buildGameMessages(
       content = stripWorld(content);
     }
     if (
-      roll &&
       turn.role === "user" &&
       i === trimmed.length - 1 &&
       trimmed[trimmed.length - 1]?.role === "user"
     ) {
-      content = `${content}\n\n${roll.prompt_block}`;
+      const injections: string[] = [];
+      if (combat?.fired) injections.push(combat.prompt_block);
+      if (roll) injections.push(roll.prompt_block);
+      if (injections.length > 0) {
+        content = `${content}\n\n${injections.join("\n\n")}`;
+      }
     }
     content = content.slice(0, 8000);
     if (!content) continue;
