@@ -7,6 +7,11 @@ import {
   type DebugSection,
   type SessionDebugMeta,
 } from "@/lib/debugDump";
+import {
+  decodeSeed,
+  dialBreakdown,
+  formatWorldSpecForPrompt,
+} from "@/lib/worldSpec";
 
 type Turn = { role: "user" | "assistant"; content: string };
 
@@ -78,16 +83,36 @@ export default function DebugPanel({ open, onClose, history, meta }: Props) {
     };
   }, [open]);
 
-  const sections: DebugSection[] = useMemo(
-    () =>
-      buildDebugSections({
-        history,
-        meta: { ...meta, engineVersion: engineVersion ?? meta.engineVersion },
-        systemPrompt,
-        openingInstruction,
-      }),
-    [history, meta, systemPrompt, openingInstruction, engineVersion]
-  );
+  const sections: DebugSection[] = useMemo(() => {
+    const spec = meta.seedCode ? decodeSeed(meta.seedCode) : null;
+    const worldSpecJson = spec
+      ? JSON.stringify(
+          {
+            code: spec.code,
+            dials: dialBreakdown(spec),
+            world_type: spec.world_type,
+            law_count: spec.law_count,
+            constraints: spec.constraints,
+            crossed_pressures: spec.crossed_pressures,
+            full: spec,
+          },
+          null,
+          2
+        )
+      : null;
+    const openingWithSpec =
+      openingInstruction && spec
+        ? `${openingInstruction}\n\n${formatWorldSpecForPrompt(spec)}`
+        : openingInstruction;
+
+    return buildDebugSections({
+      history,
+      meta: { ...meta, engineVersion: engineVersion ?? meta.engineVersion },
+      systemPrompt,
+      openingInstruction: openingWithSpec,
+      worldSpecJson,
+    });
+  }, [history, meta, systemPrompt, openingInstruction, engineVersion]);
 
   useEffect(() => {
     if (!open) return;

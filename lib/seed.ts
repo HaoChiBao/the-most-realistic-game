@@ -1,7 +1,14 @@
-// Helpers for the seed-sharing feature. A "seed" is the pristine turn-1 world:
-// the visible opening [SCENE] plus the hidden [WORLD] bible. Storing that exact
-// content (rather than an RNG number) is the only way to reproduce a world,
-// since the LLM engine is non-deterministic.
+// Helpers for the seed-sharing feature.
+//
+// Dual nature of a seed (engine v5.0+):
+// 1) Digits = generation dials (WorldSpec) that bias NEW world creation.
+// 2) Stored turn-1 bible (opening + [WORLD]) = exact shareable truth on load.
+// Loading /s/CODE never regenerates from digits — it replays the stored bible.
+// See lib/worldSpec.ts for dial decode.
+
+import { decodeSeed } from "@/lib/worldSpec";
+
+export { decodeSeed };
 
 // Split a raw engine response into its visible scene and hidden world blocks.
 export function splitSceneWorld(raw: string): {
@@ -51,7 +58,7 @@ export function deriveSetting(opening: string): string {
 }
 
 // 10-digit numeric seed code, e.g. "8194023475". First digit is never zero so
-// the code is always a full 10 characters.
+// the code is always a full 10 characters. Digits are WorldSpec dials at gen.
 export function makeSeedCode(): string {
   const first = 1 + Math.floor(Math.random() * 9);
   let rest = "";

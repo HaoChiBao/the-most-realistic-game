@@ -19,6 +19,7 @@ import {
   saveSession,
 } from "@/lib/save";
 import DebugPanel from "@/components/DebugPanel";
+import { makeSeedCode } from "@/lib/seed";
 
 const MAX_INPUT = 90;
 const MAX_CHECKPOINTS = 20;
@@ -86,6 +87,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const startedRef = useRef(false);
   const seedRef = useRef<string | null>(seedCode ?? null);
+  const seedSavedRef = useRef(Boolean(seedCode));
   const entriesRef = useRef<Entry[]>([]);
   const endedRef = useRef(false);
   const softEndedRef = useRef(false);
@@ -290,7 +292,10 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       const res = await fetch("/api/game", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ history: historyRef.current }),
+        body: JSON.stringify({
+          history: historyRef.current,
+          seedCode: seedRef.current,
+        }),
       });
 
       if (!res.ok || !res.body) {
@@ -372,12 +377,12 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   );
 
   const boot = useCallback(async () => {
-    let engineLine = "REALITY ENGINE v4.2  //  ONLINE";
+    let engineLine = "REALITY ENGINE v5.0  //  ONLINE";
     try {
       const res = await fetch("/api/engine");
       if (res.ok) {
         const data = await res.json();
-        const ver = data.version ?? "v4.2";
+        const ver = data.version ?? "v5.0";
         const banner = data.banner ?? "ONLINE";
         engineLine = `REALITY ENGINE ${ver}  //  ${banner}`;
       }
@@ -390,6 +395,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       historyRef.current = saved.history.map((t) => ({ ...t }));
       idRef.current = saved.nextEntryId;
       seedRef.current = saved.seedCode;
+      // Only mark persisted if this boot is from a shared deep link.
+      seedSavedRef.current = Boolean(seedCode);
       openingWorldRef.current = saved.openingWorld
         ? { ...saved.openingWorld }
         : saved.history[0]?.role === "assistant"
@@ -438,8 +445,15 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     }
     setBooted(true);
     if (seedCode) {
+      seedRef.current = seedCode;
+      seedSavedRef.current = true;
       await loadSeed(seedCode);
     } else {
+      // Allocate dial code before first generation so digits bias WORLDSPEC.
+      if (!seedRef.current) {
+        seedRef.current = makeSeedCode();
+        seedSavedRef.current = false;
+      }
       await streamTurn();
     }
   }, [addEntry, streamTurn, loadSeed, seedCode, focusInput]);
@@ -489,7 +503,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       addEntry("system", `WORLD SAVED. SEED ${code}  //  LINK COPIED: ${link}`);
     };
 
-    if (seedRef.current) {
+    if (seedRef.current && seedSavedRef.current) {
       announce(seedRef.current);
       return;
     }
@@ -499,21 +513,26 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       const res = await fetch("/api/seed/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ raw: first.content }),
+        body: JSON.stringify({
+          raw: first.content,
+          code: seedRef.current ?? undefined,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.code) {
         addEntry("error", data.error || "COULD NOT SAVE WORLD.");
       } else {
         seedRef.current = data.code;
+        seedSavedRef.current = true;
         announce(data.code);
+        persistSession();
       }
     } catch (err) {
       addEntry("error", `COULD NOT SAVE WORLD. ${String(err)}`);
     } finally {
       setSharing(false);
     }
-  }, [busy, sharing, worldReady, addEntry]);
+  }, [busy, sharing, worldReady, addEntry, persistSession]);
 
   const newWorld = useCallback(() => {
     if (busy) return;

@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 const SEED_CREATE_LIMIT = 10;
 const SEED_CREATE_WINDOW_MS = 60_000;
 
-type Body = { raw?: string; opening?: string; world?: string };
+type Body = { raw?: string; opening?: string; world?: string; code?: string };
 
 export async function POST(req: NextRequest) {
   const ip = clientIp(req);
@@ -81,9 +81,15 @@ export async function POST(req: NextRequest) {
   world = world.slice(0, 20000);
   const setting = deriveSetting(opening);
 
-  // Insert with a fresh numeric code, retrying on the rare collision.
+  // Prefer client-allocated dial code (digits already biased generation).
+  // Fall back to random codes on collision / missing preferred code.
+  const preferred =
+    typeof body.code === "string" && /^\d{6,12}$/.test(body.code.trim())
+      ? body.code.trim()
+      : null;
+
   for (let attempt = 0; attempt < 6; attempt++) {
-    const code = makeSeedCode();
+    const code = attempt === 0 && preferred ? preferred : makeSeedCode();
     const { error } = await supabase.rpc("create_world", {
       p_code: code,
       p_setting: setting,

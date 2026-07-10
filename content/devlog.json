@@ -1,5 +1,38 @@
 [
   {
+    "id": "2026-07-10-m8",
+    "version": "0.5.0",
+    "engine": "v5.0",
+    "date": "2026-07-10",
+    "title": "Seed dials, WorldSpec & discoverable laws",
+    "summary": "Each digit of the seed code biases world physics and social physics. Worlds seed discoverable laws; share links still store the exact turn-1 bible.",
+    "tags": ["engine", "seeds", "m8"],
+    "linear": [
+      "YAN-263",
+      "YAN-264",
+      "YAN-265",
+      "YAN-266",
+      "YAN-267",
+      "YAN-268",
+      "YAN-269",
+      "YAN-270",
+      "YAN-271",
+      "YAN-272",
+      "YAN-273",
+      "YAN-274",
+      "YAN-275"
+    ],
+    "changes": [
+      "10-axis WorldSpec decoder (type, place, isolation, law, opacity, agency, scarcity, rules, stickiness, tone)",
+      "Opening generation injects WORLDSPEC constraints from the dial code",
+      "STATE laws[] — surface vs true_rule; players earn knowledge through consequence",
+      "Crossed pressures, NPC rule carriers, threads as law probes, consistency audits in prompt",
+      "Share flow: digits bias create; preferred dial code saved; load still exact bible",
+      "Debug panel: WorldSpec dials + laws slices",
+      "Engine version bump to v5.0"
+    ]
+  },
+  {
     "id": "2026-07-10-character-pov",
     "version": "0.4.2",
     "engine": "v4.2",

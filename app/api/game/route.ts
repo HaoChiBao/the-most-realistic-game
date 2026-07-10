@@ -6,6 +6,7 @@ import {
   rateLimit,
   rateLimitHeaders,
 } from "@/lib/rateLimit";
+import { buildOpeningInstruction, decodeSeed } from "@/lib/worldSpec";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,12 +27,19 @@ function stripWorld(content: string): string {
   return scene.replace("[SCENE]", "").trim();
 }
 
-function buildMessages(history: ClientTurn[]): ChatMessage[] {
+function buildMessages(
+  history: ClientTurn[],
+  seedCode?: string | null
+): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
 
   const trimmed = history.slice(-MAX_HISTORY);
   if (trimmed.length === 0 || trimmed[0].role !== "user") {
-    messages.push({ role: "user", content: OPENING_INSTRUCTION });
+    const spec = seedCode ? decodeSeed(seedCode) : null;
+    messages.push({
+      role: "user",
+      content: buildOpeningInstruction(OPENING_INSTRUCTION, spec),
+    });
   }
 
   let lastAssistant = -1;
@@ -81,7 +89,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { history?: ClientTurn[] };
+  let body: { history?: ClientTurn[]; seedCode?: string };
   try {
     body = await req.json();
   } catch {
@@ -96,6 +104,11 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  const seedCode =
+    typeof body.seedCode === "string" && /^\d{6,12}$/.test(body.seedCode.trim())
+      ? body.seedCode.trim()
+      : null;
+
   const history: ClientTurn[] = rawHistory
     .filter(
       (t): t is ClientTurn =>
@@ -109,7 +122,7 @@ export async function POST(req: NextRequest) {
         : t
     );
 
-  const messages = buildMessages(history);
+  const messages = buildMessages(history, seedCode);
 
   let upstream: Response;
   try {
@@ -125,7 +138,7 @@ export async function POST(req: NextRequest) {
         messages,
         temperature: llm.provider === "openai" ? 1.0 : 1.05,
         top_p: 0.95,
-        max_tokens: 1200,
+        max_tokens: 1400,
         stream: true,
         ...llm.extraBody,
       }),

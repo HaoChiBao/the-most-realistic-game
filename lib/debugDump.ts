@@ -123,8 +123,10 @@ export function buildDebugSections(opts: {
   meta: SessionDebugMeta;
   systemPrompt: string | null;
   openingInstruction: string | null;
+  worldSpecJson?: string | null;
 }): DebugSection[] {
-  const { history, meta, systemPrompt, openingInstruction } = opts;
+  const { history, meta, systemPrompt, openingInstruction, worldSpecJson } =
+    opts;
   const sections: DebugSection[] = [];
 
   sections.push({
@@ -144,10 +146,19 @@ export function buildDebugSections(opts: {
     }),
   });
 
+  if (worldSpecJson) {
+    sections.push({
+      id: "worldspec",
+      title: "02 · WorldSpec (seed dials)",
+      kind: "json",
+      body: worldSpecJson,
+    });
+  }
+
   if (systemPrompt) {
     sections.push({
       id: "system-prompt",
-      title: "02 · System prompt",
+      title: worldSpecJson ? "03 · System prompt" : "02 · System prompt",
       kind: "prompt",
       body: systemPrompt,
     });
@@ -156,7 +167,7 @@ export function buildDebugSections(opts: {
   if (openingInstruction) {
     sections.push({
       id: "opening",
-      title: "03 · Opening instruction",
+      title: worldSpecJson ? "04 · Opening instruction" : "03 · Opening instruction",
       kind: "prompt",
       body: openingInstruction,
     });
@@ -205,20 +216,21 @@ export function buildDebugSections(opts: {
     const slices: [string, string, unknown][] = [
       ["player", "07 · Player", s.player],
       ["characters", "08 · Characters", s.characters],
-      ["heat", "09 · Heat / wanted", s.heat],
-      ["locations", "10 · Locations", {
+      ["laws", "09 · Laws (discoverable)", s.laws],
+      ["heat", "10 · Heat / wanted", s.heat],
+      ["locations", "11 · Locations", {
         player_location: s.player_location,
         locations: s.locations,
       }],
-      ["starting-plot", "11 · Starting plot", s.starting_plot ?? s.main_plot],
-      ["threads", "12 · Threads", s.threads],
-      ["consequences", "13 · Consequences", s.consequences],
-      ["end-clauses", "14 · End clauses / end_state", {
+      ["starting-plot", "12 · Starting plot", s.starting_plot ?? s.main_plot],
+      ["threads", "13 · Threads", s.threads],
+      ["consequences", "14 · Consequences", s.consequences],
+      ["end-clauses", "15 · End clauses / end_state", {
         end_clauses: s.end_clauses,
         end_state: s.end_state,
         active_track: s.active_track,
       }],
-      ["ambient", "15 · Ambient / timeline / clock", {
+      ["ambient", "16 · Ambient / timeline / clock", {
         ambient_hooks: s.ambient_hooks,
         timeline: s.timeline,
         clock: s.clock,
@@ -238,7 +250,7 @@ export function buildDebugSections(opts: {
 
   sections.push({
     id: "history",
-    title: "16 · Full history (all turns)",
+    title: "17 · Full history (all turns)",
     kind: "json",
     body: pretty(
       history.map((t, i) => ({
