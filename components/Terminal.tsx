@@ -32,6 +32,11 @@ import {
   formatSyncWaitSec,
   type SyncTimingRecord,
 } from "@/lib/syncTiming";
+import {
+  executeDevCommand,
+  isDevCommand,
+  type DevCommandContext,
+} from "@/lib/devCommands";
 
 const MAX_INPUT = 90;
 const MAX_CHECKPOINTS = 20;
@@ -49,7 +54,7 @@ const BOOT_LINES_BASE = [
   "loading end clauses ............ OK",
   "",
   "actions have consequences. death is possible.",
-  "type anything after the >> prompt.",
+  "type anything after the >> prompt.  dev: /commands",
   "",
 ];
 
@@ -60,6 +65,7 @@ const BOOT_LINES_SEED_BASE = [
   "",
   "loading a world someone else discovered.",
   "your choices are your own from here.",
+  "dev introspection: /commands",
   "",
 ];
 
@@ -109,6 +115,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const softEndedRef = useRef(false);
   const endLabelRef = useRef<string | null>(null);
   const worldReadyRef = useRef(false);
+  const engineVersionRef = useRef<string | undefined>(undefined);
 
   const nextId = () => ++idRef.current;
 
@@ -181,6 +188,34 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const focusInput = useCallback(
     () => setTimeout(() => inputRef.current?.focus(), 0),
     []
+  );
+
+  const devCommandContext = useCallback((): DevCommandContext => {
+    return {
+      history: historyRef.current.map((t) => ({ ...t })),
+      seedCode: seedRef.current,
+      engineVersion: engineVersionRef.current,
+      syncTimings: syncTimingsRef.current,
+      worldReady: worldReadyRef.current,
+      ended: endedRef.current,
+      softEnded: softEndedRef.current,
+      endLabel: endLabelRef.current,
+    };
+  }, []);
+
+  const runDevCommand = useCallback(
+    (input: string) => {
+      const result = executeDevCommand(input, devCommandContext());
+      addEntry("player", input);
+      addEntry("system", result.lines.join("\n"));
+      if (result.openDebugPanel) {
+        setDebugOpen(true);
+        setDebugTick((t) => t + 1);
+      }
+      focusInput();
+      setTimeout(() => persistSession(), 0);
+    },
+    [addEntry, devCommandContext, focusInput, persistSession]
   );
 
   const saveCheckpoint = useCallback(() => {
@@ -502,6 +537,19 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     setDebugOpen(false);
   }, []);
 
+  const fetchEngineVersion = useCallback(async () => {
+    try {
+      const res = await fetch("/api/engine");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (typeof data.version === "string") {
+        engineVersionRef.current = data.version;
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const beginFreshWorld = useCallback(async () => {
     const myRun = runIdRef.current;
     const stillActive = () => myRun === runIdRef.current;
@@ -513,6 +561,9 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         const data = await res.json();
         const ver = data.version ?? "v5.5";
         const banner = data.banner ?? "ONLINE";
+        if (typeof data.version === "string") {
+          engineVersionRef.current = data.version;
+        }
         engineLine = `REALITY ENGINE ${ver}  //  ${banner}`;
       }
     } catch {
@@ -543,9 +594,10 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       }
       await streamTurn();
     }
-  }, [addEntry, streamTurn, loadSeed, seedCode]);
+  }, [addEntry, streamTurn, loadSeed, seedCode, fetchEngineVersion]);
 
   const boot = useCallback(async () => {
+    void fetchEngineVersion();
     const saved = loadSession();
     if (saved && canRestoreSession(saved, seedCode)) {
       historyRef.current = saved.history.map((t) => ({ ...t }));
@@ -592,7 +644,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     }
 
     await beginFreshWorld();
-  }, [seedCode, focusInput, streamTurn, beginFreshWorld]);
+  }, [seedCode, focusInput, streamTurn, beginFreshWorld, fetchEngineVersion]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -613,7 +665,15 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     async (e: FormEvent) => {
       e.preventDefault();
       const value = input.trim().slice(0, MAX_INPUT);
-      if (!value || busy || ended || !booted) return;
+      if (!value || !booted) return;
+
+      if (isDevCommand(value)) {
+        setInput("");
+        runDevCommand(value);
+        return;
+      }
+
+      if (busy || ended) return;
       saveCheckpoint();
       setInput("");
       if (softEnded) {
@@ -625,7 +685,18 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       persistSession();
       await streamTurn();
     },
-    [input, busy, ended, booted, softEnded, addEntry, streamTurn, saveCheckpoint, persistSession]
+    [
+      input,
+      busy,
+      ended,
+      booted,
+      softEnded,
+      addEntry,
+      streamTurn,
+      saveCheckpoint,
+      persistSession,
+      runDevCommand,
+    ]
   );
 
   const shareWorld = useCallback(async () => {

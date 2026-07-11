@@ -1,5 +1,21 @@
 [
   {
+    "id": "2026-07-10-dev-commands",
+    "version": "0.6.1",
+    "engine": "v5.8",
+    "date": "2026-07-10",
+    "significance": 75,
+    "title": "In-game dev slash commands",
+    "summary": "Type /commands in the terminal for read-only STATE introspection — story, NPCs, combat injections, dials, and more. Never sent to the LLM.",
+    "tags": ["ux", "debug", "devtools"],
+    "changes": [
+      "/commands lists 25+ dev commands grouped by category",
+      "Inspect: /story /npcs /traits /heat /next /dials /state /opening /debug",
+      "Dev input shown in log but excluded from engine history and LLM payload",
+      "System output centered with pre-wrap; works while dead or syncing"
+    ]
+  },
+  {
     "id": "2026-07-10-immediate-consequences",
     "version": "0.6.0",
     "engine": "v5.8",
