@@ -10,6 +10,8 @@ const MAX_HISTORY = 40;
 /** Exported for API route + client — LLM only ever sees this many turns. */
 export const MAX_HISTORY_MESSAGES = MAX_HISTORY;
 
+const DELTA_STATE_REMINDER = `[STATE OUTPUT — DELTA ONLY this turn. Your last assistant [WORLD] has the full prior STATE. Emit ONLY changed keys: clock (required, increment turn), player_location if moved, player subfields that changed, characters[] ONLY for NPCs new or changed this turn (always include id), heat/threads/laws/locations only if touched, random_log only new entries. Target <600 chars in the STATE JSON line. Omit every unchanged key. Do NOT rewrite the full schema.]`;
+
 export function stripWorld(content: string): string {
   const idx = content.indexOf("[WORLD]");
   const scene = idx === -1 ? content : content.slice(0, idx);
@@ -38,6 +40,7 @@ export function buildGameMessages(
   for (let i = 0; i < trimmed.length; i++) {
     if (trimmed[i].role === "assistant") lastAssistant = i;
   }
+  const hasPriorWorld = lastAssistant !== -1;
 
   for (let i = 0; i < trimmed.length; i++) {
     const turn = trimmed[i];
@@ -53,6 +56,7 @@ export function buildGameMessages(
       const injections: string[] = [];
       if (consequence?.fired) injections.push(consequence.prompt_block);
       if (roll) injections.push(roll.prompt_block);
+      if (hasPriorWorld) injections.push(DELTA_STATE_REMINDER);
       if (injections.length > 0) {
         content = `${content}\n\n${injections.join("\n\n")}`;
       }

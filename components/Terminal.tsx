@@ -12,6 +12,7 @@ import {
   parseScene,
   stripControlTokens,
 } from "@/lib/sceneParse";
+import { resolveCanonicalAssistantContent } from "@/lib/stateMerge";
 import {
   buildSessionSnapshot,
   canRestoreSession,
@@ -328,9 +329,13 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       setEntryText(engineId, cleanScene);
 
       const cleanRaw = stripControlTokens(rawFull);
+      const canonicalContent = resolveCanonicalAssistantContent(
+        historyRef.current,
+        cleanRaw || cleanScene
+      );
       const assistantTurn: Turn = {
         role: "assistant",
-        content: cleanRaw || cleanScene,
+        content: canonicalContent,
       };
       historyRef.current.push(assistantTurn);
 

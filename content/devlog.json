@@ -1,5 +1,21 @@
 [
   {
+    "id": "2026-07-10-delta-state",
+    "version": "0.6.2",
+    "engine": "v5.9",
+    "date": "2026-07-10",
+    "significance": 88,
+    "title": "Delta STATE — faster sync after scene",
+    "summary": "Turn 2+ emits only changed STATE fields; client merges into canonical world. Cuts hidden [WORLD] generation from ~12s toward sub-second for quiet turns.",
+    "tags": ["engine", "performance", "state"],
+    "changes": [
+      "Turn 1: full STATE; turn 2+: delta patches only (target <600 chars)",
+      "Client-side merge by id for characters, locations, laws, threads",
+      "Per-turn delta reminder injected with player action",
+      "Engine version bump to v5.9 — start a new session"
+    ]
+  },
+  {
     "id": "2026-07-10-dev-commands",
     "version": "0.6.1",
     "engine": "v5.8",
