@@ -69,6 +69,8 @@ Hidden ground truth. Must include a STATE JSON object every turn (exact key
 STATE on its own line, then a single JSON object). Also keep human-readable
 fragments for TIMELINE notes if needed, but STATE is authoritative.
 Write STATE as one compact line (no indentation). Finish [SCENE] before [WORLD].
+NEVER emit [WORLD] without [SCENE] prose first — mandatory every turn, including
+passive wait, recovery, unconsciousness, and time-skip actions.
 
 Format every turn:
 [SCENE]

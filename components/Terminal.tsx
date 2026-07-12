@@ -8,7 +8,10 @@ import {
   type FormEvent,
 } from "react";
 import {
+  coalesceSceneText,
+  ensureAssistantHasScene,
   hasWorldMarker,
+  isLeakedEngineMarkup,
   parseScene,
   stripControlTokens,
 } from "@/lib/sceneParse";
@@ -410,15 +413,15 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       if (finished || myRun !== runIdRef.current) return;
       finished = true;
       const finishedAt = performance.now();
-      if (sceneRevealedAt === null && received.length > 0) {
+      const cleanScene = coalesceSceneText(received);
+      if (sceneRevealedAt === null && cleanScene.length > 0) {
         sceneRevealedAt = finishedAt;
       }
       if (!inputUnlocked) unlockInput(finishedAt);
 
-      const cleanScene = received.trim();
       setEntryText(engineId, cleanScene);
 
-      const cleanRaw = stripControlTokens(rawFull);
+      let cleanRaw = ensureAssistantHasScene(stripControlTokens(rawFull));
       const canonicalContent = resolveCanonicalAssistantContent(
         historyRef.current,
         cleanRaw || cleanScene
@@ -457,50 +460,76 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         unlockInput(ts);
       }
 
-      if (streamDone && shown >= received.length) {
+      if (streamDone && (received.length === 0 || shown >= received.length)) {
         finishPresent();
         return;
       }
       raf = requestAnimationFrame(tick);
     };
 
+    const needsSceneRetry = (raw: string) => {
+      const scene = parseScene(raw).scene.trim();
+      return (
+        hasWorldMarker(raw) && (!scene || isLeakedEngineMarkup(scene))
+      );
+    };
+
+    const resetStreamState = () => {
+      rawFull = "";
+      received = "";
+      lockedScene = null;
+      streamDone = false;
+      shown = 0;
+      acc = 0;
+      last = 0;
+      sceneRevealedAt = null;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+    };
+
     try {
-      const res = await fetch("/api/game", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          history: historyRef.current.slice(-MAX_HISTORY_MESSAGES),
-          seedCode: seedRef.current,
-          openingPhase: "present",
-        }),
-      });
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) resetStreamState();
 
-      if (!res.ok || !res.body) {
-        if (myRun !== runIdRef.current) return;
-        syncTypingSound(false);
-        const detail = await res.text().catch(() => "");
-        setEntries((prev) => prev.filter((e) => e.id !== engineId));
-        addEntry("error", detail || `ENGINE ERROR [${res.status}].`);
-        setBusy(false);
-        focusInput();
-        return;
-      }
+        const res = await fetch("/api/game", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            history: historyRef.current.slice(-MAX_HISTORY_MESSAGES),
+            seedCode: seedRef.current,
+            openingPhase: "present",
+          }),
+        });
 
-      raf = requestAnimationFrame(tick);
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        rawFull += decoder.decode(value, { stream: true });
-        if (lockedScene === null && hasWorldMarker(rawFull)) {
-          lockedScene = parseScene(rawFull).scene;
+        if (!res.ok || !res.body) {
+          if (myRun !== runIdRef.current) return;
+          syncTypingSound(false);
+          const detail = await res.text().catch(() => "");
+          setEntries((prev) => prev.filter((e) => e.id !== engineId));
+          addEntry("error", detail || `ENGINE ERROR [${res.status}].`);
+          setBusy(false);
+          focusInput();
+          return;
         }
-        const parsed = parseScene(rawFull);
-        received = lockedScene ?? parsed.scene;
-        if (shown > received.length) shown = received.length;
+
+        if (!raf) raf = requestAnimationFrame(tick);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          rawFull += decoder.decode(value, { stream: true });
+          if (lockedScene === null && hasWorldMarker(rawFull)) {
+            lockedScene = parseScene(rawFull).scene;
+          }
+          const parsed = parseScene(rawFull);
+          received = lockedScene ?? parsed.scene;
+          if (shown > received.length) shown = received.length;
+        }
+
+        if (!needsSceneRetry(rawFull) || attempt === 1) break;
       }
 
       streamDone = true;
@@ -568,13 +597,14 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       if (finished || myRun !== runIdRef.current) return;
       finished = true;
       const finishedAt = performance.now();
-      if (sceneRevealedAt === null && received.length > 0) {
+      const cleanScene = coalesceSceneText(received);
+      if (sceneRevealedAt === null && cleanScene.length > 0) {
         sceneRevealedAt = finishedAt;
       }
       const record: SyncTimingRecord = {
         turn: turnNumber,
         userAction: lastUserAction,
-        sceneChars: received.trim().length,
+        sceneChars: cleanScene.length,
         typingMs: Math.round((sceneRevealedAt ?? finishedAt) - turnStart),
         syncWaitMs: Math.round(
           syncGapStart !== null ? finishedAt - syncGapStart : 0
@@ -588,10 +618,9 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       }
       syncTypingSound(false);
       setSyncing(false);
-      const cleanScene = received.trim();
       setEntryText(engineId, cleanScene);
 
-      const cleanRaw = stripControlTokens(rawFull);
+      let cleanRaw = ensureAssistantHasScene(stripControlTokens(rawFull));
       const canonicalContent = resolveCanonicalAssistantContent(
         historyRef.current,
         cleanRaw || cleanScene
@@ -667,58 +696,90 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         setSyncing(false);
       }
 
-      if (streamDone && shown >= received.length) {
+      if (streamDone && (received.length === 0 || shown >= received.length)) {
         finish();
         return;
       }
       raf = requestAnimationFrame(tick);
     };
 
+    const needsSceneRetry = (raw: string) => {
+      const scene = parseScene(raw).scene.trim();
+      return (
+        hasWorldMarker(raw) && (!scene || isLeakedEngineMarkup(scene))
+      );
+    };
+
+    const resetStreamState = () => {
+      rawFull = "";
+      received = "";
+      lockedScene = null;
+      sawEnd = false;
+      sawSoftEnd = false;
+      sawDiverge = false;
+      divergeShown = false;
+      label = null;
+      streamDone = false;
+      shown = 0;
+      acc = 0;
+      last = 0;
+      syncGapStart = null;
+      sceneRevealedAt = null;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+    };
+
     try {
-      const res = await fetch("/api/game", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          history: historyRef.current.slice(-MAX_HISTORY_MESSAGES),
-          seedCode: seedRef.current,
-        }),
-      });
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) resetStreamState();
 
-      if (!res.ok || !res.body) {
-        if (myRun !== runIdRef.current) return;
-        syncTypingSound(false);
-        setSyncing(false);
-        const detail = await res.text().catch(() => "");
-        setEntries((prev) => prev.filter((e) => e.id !== engineId));
-        addEntry("error", detail || `ENGINE ERROR [${res.status}].`);
-        setBusy(false);
-        focusInput();
-        return;
-      }
+        const res = await fetch("/api/game", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            history: historyRef.current.slice(-MAX_HISTORY_MESSAGES),
+            seedCode: seedRef.current,
+          }),
+        });
 
-      raf = requestAnimationFrame(tick);
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        rawFull += decoder.decode(value, { stream: true });
-        if (lockedScene === null && hasWorldMarker(rawFull)) {
-          lockedScene = parseScene(rawFull).scene;
+        if (!res.ok || !res.body) {
+          if (myRun !== runIdRef.current) return;
+          syncTypingSound(false);
+          setSyncing(false);
+          const detail = await res.text().catch(() => "");
+          setEntries((prev) => prev.filter((e) => e.id !== engineId));
+          addEntry("error", detail || `ENGINE ERROR [${res.status}].`);
+          setBusy(false);
+          focusInput();
+          return;
         }
-        const parsed = parseScene(rawFull);
-        received = lockedScene ?? parsed.scene;
-        if (shown > received.length) shown = received.length;
-        sawEnd = parsed.ended;
-        sawSoftEnd = parsed.softEnded;
-        if (parsed.diverged) sawDiverge = true;
-        if (parsed.endLabel) label = parsed.endLabel;
-        if (parsed.diverged && !divergeShown) {
-          divergeShown = true;
-          addEntry("diverge", "YOUR STORY IS CHANGING");
+
+        if (!raf) raf = requestAnimationFrame(tick);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          rawFull += decoder.decode(value, { stream: true });
+          if (lockedScene === null && hasWorldMarker(rawFull)) {
+            lockedScene = parseScene(rawFull).scene;
+          }
+          const parsed = parseScene(rawFull);
+          received = lockedScene ?? parsed.scene;
+          if (shown > received.length) shown = received.length;
+          sawEnd = parsed.ended;
+          sawSoftEnd = parsed.softEnded;
+          if (parsed.diverged) sawDiverge = true;
+          if (parsed.endLabel) label = parsed.endLabel;
+          if (parsed.diverged && !divergeShown) {
+            divergeShown = true;
+            addEntry("diverge", "YOUR STORY IS CHANGING");
+          }
         }
+
+        if (!needsSceneRetry(rawFull) || attempt === 1) break;
       }
 
       streamDone = true;

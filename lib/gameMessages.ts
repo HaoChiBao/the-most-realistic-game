@@ -15,7 +15,7 @@ const MAX_HISTORY = 40;
 /** Exported for API route + client — LLM only ever sees this many turns. */
 export const MAX_HISTORY_MESSAGES = MAX_HISTORY;
 
-const DELTA_STATE_REMINDER = `[STATE OUTPUT — DELTA ONLY this turn. Your last assistant [WORLD] has the full prior STATE. Emit ONLY changed keys: clock (required, increment turn), player_location if moved, player subfields that changed, characters[] ONLY for NPCs new or changed this turn (always include id), heat/threads/laws/locations only if touched, random_log only new entries. Target <600 chars in the STATE JSON line. Omit every unchanged key. Do NOT rewrite the full schema.]`;
+const DELTA_STATE_REMINDER = `[STATE OUTPUT — DELTA ONLY this turn. Your last assistant [WORLD] has the full prior STATE. Emit ONLY changed keys: clock (required, increment turn), player_location if moved, player subfields that changed, characters[] ONLY for NPCs new or changed this turn (always include id), heat/threads/laws/locations only if touched, random_log only new entries. Target <600 chars in the STATE JSON line. Omit every unchanged key. Do NOT rewrite the full schema. You MUST still write [SCENE] prose before [WORLD] — never WORLD-only.]`;
 
 export function stripWorld(content: string): string {
   const idx = content.indexOf("[WORLD]");

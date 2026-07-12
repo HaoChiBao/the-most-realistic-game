@@ -1,4 +1,12 @@
-import { hasWorldMarker, parseScene, stripControlTokens } from "../lib/sceneParse";
+import {
+  coalesceSceneText,
+  ensureAssistantHasScene,
+  hasWorldMarker,
+  isLeakedEngineMarkup,
+  parseScene,
+  stripControlTokens,
+  EMPTY_SCENE_FALLBACK,
+} from "../lib/sceneParse";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -46,6 +54,34 @@ const stateOnly = parseScene(
   "[SCENE]\nYou stand in rain.\nSTATE\n{\"world_type\":\"grounded\"}"
 );
 assert(stateOnly.scene === "You stand in rain.", "truncate at STATE line");
+
+// WORLD-first response must not leak markers into the visible scene.
+const worldOnly = parseScene(
+  "[WORLD]\nSTATE\n{\"clock\":{\"turn\":11},\"player_location\":\"hall\"}"
+);
+assert(worldOnly.scene === "", "WORLD-first response has no visible scene");
+
+const worldStatePartial = parseScene("[WORLD]\nSTATE");
+assert(worldStatePartial.scene === "", "WORLD + STATE partial has no visible scene");
+
+assert(
+  isLeakedEngineMarkup("[WORLD]") && isLeakedEngineMarkup("[WORLD]\nSTATE"),
+  "engine markup detected"
+);
+assert(
+  coalesceSceneText("") === EMPTY_SCENE_FALLBACK,
+  "empty scene coalesces to fallback"
+);
+assert(
+  coalesceSceneText("[WORLD]") === EMPTY_SCENE_FALLBACK,
+  "leaked markup coalesces to fallback"
+);
+
+const repaired = ensureAssistantHasScene(
+  "[WORLD]\nSTATE\n{\"clock\":{\"turn\":11}}"
+);
+assert(repaired.startsWith("[SCENE]"), "ensureAssistantHasScene adds SCENE");
+assert(hasWorldMarker(repaired), "ensureAssistantHasScene keeps WORLD");
 
 assert(hasWorldMarker("[SCENE]\na\n[WORLD]\nSTATE\n{}") === true, "world marker");
 assert(hasWorldMarker("[SCENE]\nonly scene") === false, "no world marker");
