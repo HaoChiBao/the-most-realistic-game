@@ -59,6 +59,8 @@ export type SessionDebugMeta = {
   softEnded: boolean;
   endLabel: string | null;
   worldReady: boolean;
+  sceneReady?: boolean;
+  worldHydrating?: boolean;
   syncTimings?: SyncTimingRecord[];
 };
 

@@ -8,11 +8,15 @@ import {
   type FormEvent,
 } from "react";
 import {
+  coalesceSceneText,
+  ensureAssistantHasScene,
   hasWorldMarker,
+  isLeakedEngineMarkup,
   parseScene,
   stripControlTokens,
 } from "@/lib/sceneParse";
-import { resolveCanonicalAssistantContent } from "@/lib/stateMerge";
+import { resolveCanonicalAssistantContent, mergeHydrationIntoOpening } from "@/lib/stateMerge";
+import { readGameStreamBody } from "@/lib/readGameStream";
 import {
   buildSessionSnapshot,
   canRestoreSession,
@@ -90,6 +94,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [worldSyncing, setWorldSyncing] = useState(false);
+  const [worldHydrating, setWorldHydrating] = useState(false);
+  const [sceneReady, setSceneReady] = useState(false);
   const [lastSyncWaitSec, setLastSyncWaitSec] = useState<string | null>(null);
   const [booted, setBooted] = useState(false);
   const [ended, setEnded] = useState(false);
@@ -116,6 +122,9 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const softEndedRef = useRef(false);
   const endLabelRef = useRef<string | null>(null);
   const worldReadyRef = useRef(false);
+  const sceneReadyRef = useRef(false);
+  const worldHydratingRef = useRef(false);
+  const hydrationPromiseRef = useRef<Promise<void> | null>(null);
   const engineVersionRef = useRef<string | undefined>(undefined);
 
   const nextId = () => ++idRef.current;
@@ -161,6 +170,14 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   useEffect(() => {
     worldReadyRef.current = worldReady;
   }, [worldReady]);
+
+  useEffect(() => {
+    sceneReadyRef.current = sceneReady;
+  }, [sceneReady]);
+
+  useEffect(() => {
+    worldHydratingRef.current = worldHydrating;
+  }, [worldHydrating]);
 
   useEffect(() => {
     scrollToBottom();
@@ -261,6 +278,280 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     [addEntry, setEntryText, scrollToBottom]
   );
 
+  const waitForWorldReady = useCallback(async () => {
+    if (worldReadyRef.current) return;
+    const pending = hydrationPromiseRef.current;
+    if (pending) {
+      setWorldHydrating(true);
+      await pending;
+    }
+  }, []);
+
+  const hydrateWorld = useCallback(
+    async (myRun: number, presentTypingMs: number, sceneChars: number) => {
+      const hydrateStart = performance.now();
+      setWorldHydrating(true);
+
+      const finishHydration = (hydrateMs: number, ok: boolean) => {
+        if (myRun !== runIdRef.current) return;
+        setWorldHydrating(false);
+        if (ok) {
+          setWorldReady(true);
+          worldReadyRef.current = true;
+          const record: SyncTimingRecord = {
+            turn: 0,
+            userAction: null,
+            sceneChars,
+            typingMs: presentTypingMs,
+            syncWaitMs: 0,
+            hydrateMs: hydrateMs,
+            totalMs: presentTypingMs,
+            phase: "present",
+          };
+          syncTimingsRef.current = [...syncTimingsRef.current, record].slice(-40);
+          setTimeout(() => persistSession(), 0);
+        }
+        hydrationPromiseRef.current = null;
+      };
+
+      try {
+        const res = await fetch("/api/game", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            history: historyRef.current.slice(-MAX_HISTORY_MESSAGES),
+            seedCode: seedRef.current,
+            openingPhase: "hydrate",
+          }),
+        });
+
+        if (!res.ok || !res.body) {
+          if (myRun !== runIdRef.current) return;
+          const detail = await res.text().catch(() => "");
+          addEntry(
+            "error",
+            detail || `HYDRATION FAILED [${res.status}]. Try your action again.`
+          );
+          finishHydration(Math.round(performance.now() - hydrateStart), false);
+          return;
+        }
+
+        const raw = await readGameStreamBody(res.body);
+        if (myRun !== runIdRef.current) return;
+
+        const opening = historyRef.current[0];
+        if (!opening || opening.role !== "assistant") {
+          finishHydration(Math.round(performance.now() - hydrateStart), false);
+          return;
+        }
+
+        const hydrated = mergeHydrationIntoOpening(
+          opening.content,
+          stripControlTokens(raw)
+        );
+        historyRef.current[0] = { role: "assistant", content: hydrated };
+        openingWorldRef.current = { ...historyRef.current[0] };
+        finishHydration(Math.round(performance.now() - hydrateStart), true);
+      } catch (err) {
+        if (myRun !== runIdRef.current) return;
+        addEntry("error", `HYDRATION LOST. ${String(err)}`);
+        finishHydration(Math.round(performance.now() - hydrateStart), false);
+      }
+    },
+    [addEntry, persistSession]
+  );
+
+  const startHydration = useCallback(
+    (myRun: number, presentTypingMs: number, sceneChars: number) => {
+      if (hydrationPromiseRef.current) return;
+      const promise = hydrateWorld(myRun, presentTypingMs, sceneChars);
+      hydrationPromiseRef.current = promise;
+      void promise;
+    },
+    [hydrateWorld]
+  );
+
+  const streamOpeningPresent = useCallback(async () => {
+    const myRun = runIdRef.current;
+    setBusy(true);
+    setSceneReady(false);
+    sceneReadyRef.current = false;
+    setWorldReady(false);
+    worldReadyRef.current = false;
+    setWorldSyncing(false);
+    setWorldHydrating(false);
+    setLastSyncWaitSec(null);
+    hydrationPromiseRef.current = null;
+
+    const engineId = addEntry("engine", "");
+    const turnStart = performance.now();
+    let sceneRevealedAt: number | null = null;
+    let inputUnlocked = false;
+
+    let received = "";
+    let rawFull = "";
+    let streamDone = false;
+    let shown = 0;
+    let acc = 0;
+    let last = 0;
+    let raf = 0;
+    let finished = false;
+    let lockedScene: string | null = null;
+
+    const unlockInput = (ts: number) => {
+      if (inputUnlocked || myRun !== runIdRef.current) return;
+      inputUnlocked = true;
+      if (sceneRevealedAt === null) sceneRevealedAt = ts;
+      setSceneReady(true);
+      sceneReadyRef.current = true;
+      setBusy(false);
+      syncTypingSound(false);
+      focusInput();
+    };
+
+    const finishPresent = () => {
+      if (finished || myRun !== runIdRef.current) return;
+      finished = true;
+      const finishedAt = performance.now();
+      const cleanScene = coalesceSceneText(received);
+      if (sceneRevealedAt === null && cleanScene.length > 0) {
+        sceneRevealedAt = finishedAt;
+      }
+      if (!inputUnlocked) unlockInput(finishedAt);
+
+      setEntryText(engineId, cleanScene);
+
+      let cleanRaw = ensureAssistantHasScene(stripControlTokens(rawFull));
+      const canonicalContent = resolveCanonicalAssistantContent(
+        historyRef.current,
+        cleanRaw || cleanScene
+      );
+      const assistantTurn: Turn = {
+        role: "assistant",
+        content: canonicalContent,
+      };
+      historyRef.current.push(assistantTurn);
+      openingWorldRef.current = { ...assistantTurn };
+
+      const typingMs = Math.round((sceneRevealedAt ?? finishedAt) - turnStart);
+      startHydration(myRun, typingMs, cleanScene.length);
+      setTimeout(() => persistSession(), 0);
+    };
+
+    const tick = (ts: number) => {
+      if (!last) last = ts;
+      acc += ((ts - last) / 1000) * TYPE_CPS;
+      last = ts;
+      const reveal = Math.floor(acc);
+      const hasMoreToShow = shown < received.length;
+
+      if (reveal > 0 && hasMoreToShow) {
+        acc -= reveal;
+        shown = Math.min(received.length, shown + reveal);
+        setEntryText(engineId, received.slice(0, shown));
+        scrollToBottom();
+      }
+
+      syncTypingSound(hasMoreToShow && !finished);
+
+      const sceneFullyShown =
+        received.length > 0 && shown >= received.length;
+      if (sceneFullyShown) {
+        unlockInput(ts);
+      }
+
+      if (streamDone && (received.length === 0 || shown >= received.length)) {
+        finishPresent();
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+
+    const needsSceneRetry = (raw: string) => {
+      const scene = parseScene(raw).scene.trim();
+      return (
+        hasWorldMarker(raw) && (!scene || isLeakedEngineMarkup(scene))
+      );
+    };
+
+    const resetStreamState = () => {
+      rawFull = "";
+      received = "";
+      lockedScene = null;
+      streamDone = false;
+      shown = 0;
+      acc = 0;
+      last = 0;
+      sceneRevealedAt = null;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+    };
+
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) resetStreamState();
+
+        const res = await fetch("/api/game", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            history: historyRef.current.slice(-MAX_HISTORY_MESSAGES),
+            seedCode: seedRef.current,
+            openingPhase: "present",
+          }),
+        });
+
+        if (!res.ok || !res.body) {
+          if (myRun !== runIdRef.current) return;
+          syncTypingSound(false);
+          const detail = await res.text().catch(() => "");
+          setEntries((prev) => prev.filter((e) => e.id !== engineId));
+          addEntry("error", detail || `ENGINE ERROR [${res.status}].`);
+          setBusy(false);
+          focusInput();
+          return;
+        }
+
+        if (!raf) raf = requestAnimationFrame(tick);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          rawFull += decoder.decode(value, { stream: true });
+          if (lockedScene === null && hasWorldMarker(rawFull)) {
+            lockedScene = parseScene(rawFull).scene;
+          }
+          const parsed = parseScene(rawFull);
+          received = lockedScene ?? parsed.scene;
+          if (shown > received.length) shown = received.length;
+        }
+
+        if (!needsSceneRetry(rawFull) || attempt === 1) break;
+      }
+
+      streamDone = true;
+    } catch (err) {
+      cancelAnimationFrame(raf);
+      syncTypingSound(false);
+      if (!finished && myRun === runIdRef.current) {
+        setEntries((prev) => prev.filter((e) => e.id !== engineId));
+        addEntry("error", `SIGNAL LOST. ${String(err)}`);
+        setBusy(false);
+        focusInput();
+      }
+    }
+  }, [
+    addEntry,
+    scrollToBottom,
+    setEntryText,
+    focusInput,
+    persistSession,
+    startHydration,
+  ]);
+
   const streamTurn = useCallback(async () => {
     const myRun = runIdRef.current;
     setBusy(true);
@@ -306,18 +597,20 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       if (finished || myRun !== runIdRef.current) return;
       finished = true;
       const finishedAt = performance.now();
-      if (sceneRevealedAt === null && received.length > 0) {
+      const cleanScene = coalesceSceneText(received);
+      if (sceneRevealedAt === null && cleanScene.length > 0) {
         sceneRevealedAt = finishedAt;
       }
       const record: SyncTimingRecord = {
         turn: turnNumber,
         userAction: lastUserAction,
-        sceneChars: received.trim().length,
+        sceneChars: cleanScene.length,
         typingMs: Math.round((sceneRevealedAt ?? finishedAt) - turnStart),
         syncWaitMs: Math.round(
           syncGapStart !== null ? finishedAt - syncGapStart : 0
         ),
         totalMs: Math.round(finishedAt - turnStart),
+        phase: "play",
       };
       syncTimingsRef.current = [...syncTimingsRef.current, record].slice(-40);
       if (record.syncWaitMs > 0) {
@@ -325,10 +618,9 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       }
       syncTypingSound(false);
       setSyncing(false);
-      const cleanScene = received.trim();
       setEntryText(engineId, cleanScene);
 
-      const cleanRaw = stripControlTokens(rawFull);
+      let cleanRaw = ensureAssistantHasScene(stripControlTokens(rawFull));
       const canonicalContent = resolveCanonicalAssistantContent(
         historyRef.current,
         cleanRaw || cleanScene
@@ -404,58 +696,90 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         setSyncing(false);
       }
 
-      if (streamDone && shown >= received.length) {
+      if (streamDone && (received.length === 0 || shown >= received.length)) {
         finish();
         return;
       }
       raf = requestAnimationFrame(tick);
     };
 
+    const needsSceneRetry = (raw: string) => {
+      const scene = parseScene(raw).scene.trim();
+      return (
+        hasWorldMarker(raw) && (!scene || isLeakedEngineMarkup(scene))
+      );
+    };
+
+    const resetStreamState = () => {
+      rawFull = "";
+      received = "";
+      lockedScene = null;
+      sawEnd = false;
+      sawSoftEnd = false;
+      sawDiverge = false;
+      divergeShown = false;
+      label = null;
+      streamDone = false;
+      shown = 0;
+      acc = 0;
+      last = 0;
+      syncGapStart = null;
+      sceneRevealedAt = null;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+    };
+
     try {
-      const res = await fetch("/api/game", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          history: historyRef.current.slice(-MAX_HISTORY_MESSAGES),
-          seedCode: seedRef.current,
-        }),
-      });
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) resetStreamState();
 
-      if (!res.ok || !res.body) {
-        if (myRun !== runIdRef.current) return;
-        syncTypingSound(false);
-        setSyncing(false);
-        const detail = await res.text().catch(() => "");
-        setEntries((prev) => prev.filter((e) => e.id !== engineId));
-        addEntry("error", detail || `ENGINE ERROR [${res.status}].`);
-        setBusy(false);
-        focusInput();
-        return;
-      }
+        const res = await fetch("/api/game", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            history: historyRef.current.slice(-MAX_HISTORY_MESSAGES),
+            seedCode: seedRef.current,
+          }),
+        });
 
-      raf = requestAnimationFrame(tick);
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        rawFull += decoder.decode(value, { stream: true });
-        if (lockedScene === null && hasWorldMarker(rawFull)) {
-          lockedScene = parseScene(rawFull).scene;
+        if (!res.ok || !res.body) {
+          if (myRun !== runIdRef.current) return;
+          syncTypingSound(false);
+          setSyncing(false);
+          const detail = await res.text().catch(() => "");
+          setEntries((prev) => prev.filter((e) => e.id !== engineId));
+          addEntry("error", detail || `ENGINE ERROR [${res.status}].`);
+          setBusy(false);
+          focusInput();
+          return;
         }
-        const parsed = parseScene(rawFull);
-        received = lockedScene ?? parsed.scene;
-        if (shown > received.length) shown = received.length;
-        sawEnd = parsed.ended;
-        sawSoftEnd = parsed.softEnded;
-        if (parsed.diverged) sawDiverge = true;
-        if (parsed.endLabel) label = parsed.endLabel;
-        if (parsed.diverged && !divergeShown) {
-          divergeShown = true;
-          addEntry("diverge", "YOUR STORY IS CHANGING");
+
+        if (!raf) raf = requestAnimationFrame(tick);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          rawFull += decoder.decode(value, { stream: true });
+          if (lockedScene === null && hasWorldMarker(rawFull)) {
+            lockedScene = parseScene(rawFull).scene;
+          }
+          const parsed = parseScene(rawFull);
+          received = lockedScene ?? parsed.scene;
+          if (shown > received.length) shown = received.length;
+          sawEnd = parsed.ended;
+          sawSoftEnd = parsed.softEnded;
+          if (parsed.diverged) sawDiverge = true;
+          if (parsed.endLabel) label = parsed.endLabel;
+          if (parsed.diverged && !divergeShown) {
+            divergeShown = true;
+            addEntry("diverge", "YOUR STORY IS CHANGING");
+          }
         }
+
+        if (!needsSceneRetry(rawFull) || attempt === 1) break;
       }
 
       streamDone = true;
@@ -497,6 +821,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         seedRef.current = code;
         addEntry("system", `SEED ${code} LOADED.`);
         await revealText(String(data.opening).trim());
+        setSceneReady(true);
+        sceneReadyRef.current = true;
         setWorldReady(true);
         worldReadyRef.current = true;
         setBusy(false);
@@ -532,6 +858,10 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     setInput("");
     setBusy(false);
     setWorldSyncing(false);
+    setWorldHydrating(false);
+    setSceneReady(false);
+    sceneReadyRef.current = false;
+    hydrationPromiseRef.current = null;
     setLastSyncWaitSec(null);
     setBooted(false);
     setEnded(false);
@@ -597,9 +927,9 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         seedRef.current = makeSeedCode();
         seedSavedRef.current = false;
       }
-      await streamTurn();
+      await streamOpeningPresent();
     }
-  }, [addEntry, streamTurn, loadSeed, seedCode, fetchEngineVersion]);
+  }, [addEntry, streamOpeningPresent, loadSeed, seedCode, fetchEngineVersion]);
 
   const boot = useCallback(async () => {
     void fetchEngineVersion();
@@ -635,7 +965,18 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       endLabelRef.current = saved.endLabel;
       setWorldReady(saved.worldReady);
       worldReadyRef.current = saved.worldReady;
+      setSceneReady(true);
+      sceneReadyRef.current = true;
       setBooted(true);
+      if (
+        !saved.worldReady &&
+        historyRef.current.length === 1 &&
+        historyRef.current[0]?.role === "assistant" &&
+        !historyRef.current.some((t) => t.role === "user")
+      ) {
+        const scene = parseScene(historyRef.current[0].content).scene;
+        startHydration(runIdRef.current, 0, scene.length);
+      }
       if (last?.role === "user" && !saved.ended) {
         await streamTurn();
       } else {
@@ -649,7 +990,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     }
 
     await beginFreshWorld();
-  }, [seedCode, focusInput, streamTurn, beginFreshWorld, fetchEngineVersion]);
+  }, [seedCode, focusInput, streamTurn, beginFreshWorld, fetchEngineVersion, startHydration]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -678,7 +1019,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         return;
       }
 
-      if (busy || ended) return;
+      if (busy || ended || !sceneReady) return;
       saveCheckpoint();
       setInput("");
       if (softEnded) {
@@ -688,6 +1029,30 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       addEntry("player", value);
       historyRef.current.push({ role: "user", content: value });
       persistSession();
+
+      if (!worldReadyRef.current) {
+        if (
+          !hydrationPromiseRef.current &&
+          historyRef.current[0]?.role === "assistant"
+        ) {
+          const scene = parseScene(historyRef.current[0].content).scene;
+          startHydration(runIdRef.current, 0, scene.length);
+        }
+        setBusy(true);
+        setWorldHydrating(true);
+        await waitForWorldReady();
+        setBusy(false);
+        setWorldHydrating(false);
+        if (!worldReadyRef.current) {
+          addEntry(
+            "error",
+            "WORLD STILL LOADING. Wait a moment and try again."
+          );
+          focusInput();
+          return;
+        }
+      }
+
       await streamTurn();
     },
     [
@@ -695,12 +1060,16 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       busy,
       ended,
       booted,
+      sceneReady,
       softEnded,
       addEntry,
       streamTurn,
       saveCheckpoint,
       persistSession,
       runDevCommand,
+      waitForWorldReady,
+      startHydration,
+      focusInput,
     ]
   );
 
@@ -789,6 +1158,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     historyRef.current.push({ ...opening });
     const scene = parseScene(opening.content).scene;
     void revealText(scene).then(() => {
+      setSceneReady(true);
+      sceneReadyRef.current = true;
       setWorldReady(true);
       worldReadyRef.current = true;
       focusInput();
@@ -823,7 +1194,11 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     : busy
     ? worldSyncing
       ? "syncing world state... almost ready"
+      : worldHydrating
+      ? "world catching up... almost ready"
       : "type your next move... it sends when the world settles"
+    : worldHydrating
+    ? "world catching up... your move waits until ready"
     : softEnded
     ? "the world continues — what do you do?"
     : "what do you do?";
@@ -885,7 +1260,12 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
             />
             {sendLocked && (
               <span className="send-lock">
-                {worldSyncing ? "syncing" : "loading"}
+                {worldSyncing ? "syncing" : worldHydrating ? "hydrating" : "loading"}
+              </span>
+            )}
+            {!sendLocked && worldHydrating && (
+              <span className="send-lock" aria-label="hydrating">
+                hydrating
               </span>
             )}
             {!sendLocked && lastSyncWaitSec && (
@@ -987,6 +1367,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
           softEnded,
           endLabel,
           worldReady,
+          sceneReady,
+          worldHydrating,
           syncTimings: syncTimingsRef.current,
         }}
       />

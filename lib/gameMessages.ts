@@ -1,16 +1,21 @@
-import { OPENING_INSTRUCTION, SYSTEM_PROMPT } from "@/lib/systemPrompt";
+import {
+  OPENING_HYDRATION_INSTRUCTION,
+  OPENING_PRESENT_INSTRUCTION,
+  SYSTEM_PROMPT,
+} from "@/lib/systemPrompt";
 import type { RandomRollResult } from "@/lib/randomness";
 import type { ActionConsequenceResult } from "@/lib/actionConsequence";
 import { buildOpeningInstruction, decodeSeed } from "@/lib/worldSpec";
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 export type ClientTurn = { role: "user" | "assistant"; content: string };
+export type OpeningPhase = "present" | "hydrate";
 
 const MAX_HISTORY = 40;
 /** Exported for API route + client — LLM only ever sees this many turns. */
 export const MAX_HISTORY_MESSAGES = MAX_HISTORY;
 
-const DELTA_STATE_REMINDER = `[STATE OUTPUT — DELTA ONLY this turn. Your last assistant [WORLD] has the full prior STATE. Emit ONLY changed keys: clock (required, increment turn), player_location if moved, player subfields that changed, characters[] ONLY for NPCs new or changed this turn (always include id), heat/threads/laws/locations only if touched, random_log only new entries. Target <600 chars in the STATE JSON line. Omit every unchanged key. Do NOT rewrite the full schema.]`;
+const DELTA_STATE_REMINDER = `[STATE OUTPUT — DELTA ONLY this turn. Your last assistant [WORLD] has the full prior STATE. Emit ONLY changed keys: clock (required, increment turn), player_location if moved, player subfields that changed, characters[] ONLY for NPCs new or changed this turn (always include id), heat/threads/laws/locations only if touched, random_log only new entries. Target <600 chars in the STATE JSON line. Omit every unchanged key. Do NOT rewrite the full schema. You MUST still write [SCENE] prose before [WORLD] — never WORLD-only.]`;
 
 export function stripWorld(content: string): string {
   const idx = content.indexOf("[WORLD]");
@@ -23,16 +28,32 @@ export function buildGameMessages(
   history: ClientTurn[],
   seedCode?: string | null,
   roll?: RandomRollResult | null,
-  consequence?: ActionConsequenceResult | null
+  consequence?: ActionConsequenceResult | null,
+  openingPhase?: OpeningPhase | null
 ): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
 
   const trimmed = history.slice(-MAX_HISTORY);
-  if (trimmed.length === 0 || trimmed[0].role !== "user") {
-    const spec = seedCode ? decodeSeed(seedCode) : null;
+
+  if (openingPhase === "hydrate") {
+    const opening = trimmed.find((t) => t.role === "assistant");
+    if (!opening) {
+      throw new Error("hydrate phase requires an assistant opening turn");
+    }
+    messages.push({ role: "assistant", content: opening.content.slice(0, 8000) });
     messages.push({
       role: "user",
-      content: buildOpeningInstruction(OPENING_INSTRUCTION, spec),
+      content: OPENING_HYDRATION_INSTRUCTION,
+    });
+    return messages;
+  }
+
+  if (trimmed.length === 0 || trimmed[0].role !== "user") {
+    const spec = seedCode ? decodeSeed(seedCode) : null;
+    const instruction = OPENING_PRESENT_INSTRUCTION;
+    messages.push({
+      role: "user",
+      content: buildOpeningInstruction(instruction, spec),
     });
   }
 

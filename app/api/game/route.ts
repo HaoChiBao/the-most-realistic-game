@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { buildGameMessages, MAX_HISTORY_MESSAGES } from "@/lib/gameMessages";
+import type { OpeningPhase } from "@/lib/gameMessages";
 import { getLlmConfig } from "@/lib/llm";
 import { resolveActionConsequence } from "@/lib/actionConsequence";
 import { resolveRollForHistory } from "@/lib/rollContext";
@@ -49,7 +50,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { history?: ClientTurn[]; seedCode?: string };
+  let body: {
+    history?: ClientTurn[];
+    seedCode?: string;
+    openingPhase?: OpeningPhase;
+  };
   try {
     body = await req.json();
   } catch {
@@ -84,15 +89,35 @@ export async function POST(req: NextRequest) {
       ? body.seedCode.trim()
       : null;
 
-  const roll = resolveRollForHistory(history, seedCode);
-  const consequence = resolveActionConsequence(history);
-  const messages = buildGameMessages(history, seedCode, roll, consequence);
+  const openingPhase: OpeningPhase | null =
+    body.openingPhase === "present" || body.openingPhase === "hydrate"
+      ? body.openingPhase
+      : null;
+
+  const roll =
+    openingPhase === "hydrate"
+      ? null
+      : resolveRollForHistory(history, seedCode);
+  const consequence =
+    openingPhase === "hydrate" ? null : resolveActionConsequence(history);
+  const messages = buildGameMessages(
+    history,
+    seedCode,
+    roll,
+    consequence,
+    openingPhase
+  );
+
+  const maxTokens =
+    openingPhase === "present" ? 500 : openingPhase === "hydrate" ? 1400 : 1400;
 
   const rollHeader = roll
     ? roll.fired
       ? `${roll.table}/${roll.tier}`
       : "none"
-    : "opening";
+    : openingPhase === "hydrate"
+      ? "hydrate"
+      : "opening";
 
   let upstream: Response;
   try {
@@ -108,7 +133,7 @@ export async function POST(req: NextRequest) {
         messages,
         temperature: llm.provider === "openai" ? 1.0 : 1.05,
         top_p: 0.95,
-        max_tokens: 1400,
+        max_tokens: maxTokens,
         stream: true,
         ...llm.extraBody,
       }),

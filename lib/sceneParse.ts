@@ -18,6 +18,39 @@ export function hasWorldMarker(raw: string): boolean {
   return /\[\s*WORLD\s*\]/i.test(raw);
 }
 
+/** Shown when the model emits STATE without player-visible prose. */
+export const EMPTY_SCENE_FALLBACK =
+  "Time passes. You stay where you are.";
+
+/** True when visible text is leaked engine markup, not narrative. */
+export function isLeakedEngineMarkup(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (/^\[\s*WORLD\s*\]/i.test(t)) return true;
+  if (/^\[\s*SCENE\s*\]\s*$/i.test(t)) return true;
+  if (/^(?:\[\s*WORLD\s*\]\s*)?STATE\s*$/i.test(t)) return true;
+  return false;
+}
+
+/** Player-visible scene, with fallback when the model skipped prose. */
+export function coalesceSceneText(scene: string): string {
+  const t = scene.trim();
+  if (!t || isLeakedEngineMarkup(t)) return EMPTY_SCENE_FALLBACK;
+  return t;
+}
+
+/** Ensure stored assistant turns include [SCENE] so history does not corrupt. */
+export function ensureAssistantHasScene(raw: string): string {
+  const clean = raw.trim();
+  if (!clean) return clean;
+
+  const scene = parseScene(clean).scene.trim();
+  if (scene && !isLeakedEngineMarkup(scene)) return clean;
+  if (!hasWorldMarker(clean)) return clean;
+
+  return `[SCENE]\n${EMPTY_SCENE_FALLBACK}\n\n${clean}`;
+}
+
 /** Pull visible scene prose from raw engine output (before token stripping). */
 function extractSceneText(raw: string): string {
   const sceneM = raw.match(/\[\s*SCENE\s*\]/i);
@@ -27,12 +60,17 @@ function extractSceneText(raw: string): string {
 
   const start = sceneIdx !== -1 ? sceneIdx + sceneM![0].length : 0;
 
+  // Response starts with [WORLD] and has no [SCENE] — no visible prose.
+  if (worldIdx !== -1 && worldIdx === start && sceneIdx === -1) {
+    return "";
+  }
+
   let end = raw.length;
   if (worldIdx !== -1 && worldIdx > start) {
     end = worldIdx;
   } else {
     const tail = raw.slice(start);
-    const stateM = tail.match(/\n\s*STATE\s*\n/i);
+    const stateM = tail.match(/\n\s*STATE(?:\s*\n|$)/i);
     if (stateM && stateM.index !== undefined) {
       end = start + stateM.index;
     } else {
@@ -42,7 +80,7 @@ function extractSceneText(raw: string): string {
   }
 
   const text = raw.slice(start, end);
-  if (looksLikeStateJson(text)) return "";
+  if (looksLikeStateJson(text) || isLeakedEngineMarkup(text)) return "";
   return text;
 }
 
