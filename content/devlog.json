@@ -1,5 +1,22 @@
 [
   {
+    "id": "2026-07-12-two-phase-opening",
+    "version": "0.7.0",
+    "engine": "v6.0",
+    "date": "2026-07-12",
+    "significance": 95,
+    "title": "Two-phase opening — play while world hydrates",
+    "summary": "Fresh worlds split into Phase A (scene label + bootstrap STATE, input unlocks in seconds) and Phase B (background hydration with full turn-1 detail). First action waits only if hydration is still running.",
+    "tags": ["engine", "performance", "ux", "opening"],
+    "changes": [
+      "Phase A: abstract [SCENE] + bootstrap STATE (~800 char cap)",
+      "Phase B: single background hydration delta — same full bible as before",
+      "Input unlocks when scene is revealed; turn resolution waits on hydration",
+      "/sync shows hydrateMs for opening turns",
+      "Engine version bump to v6.0 — start a new session"
+    ]
+  },
+  {
     "id": "2026-07-10-delta-state",
     "version": "0.6.2",
     "engine": "v5.9",

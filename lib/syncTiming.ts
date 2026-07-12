@@ -10,6 +10,10 @@ export type SyncTimingRecord = {
   syncWaitMs: number;
   /** Request start → turn fully complete. */
   totalMs: number;
+  /** Background hydration after two-phase opening (ms). */
+  hydrateMs?: number;
+  /** present = phase A opening; hydrate = background; play = normal turn */
+  phase?: "present" | "hydrate" | "play";
 };
 
 export function formatMs(ms: number): string {
@@ -32,24 +36,37 @@ export function formatSyncTimingTable(records: SyncTimingRecord[]): string {
     "",
     "typingMs   = request start until on-screen text is fully revealed",
     "syncWaitMs = scene revealed until hidden [WORLD]/STATE stream completes",
+    "hydrateMs  = background hydration after two-phase opening (phase B)",
     "totalMs    = request start until turn is ready for input",
     "",
-    "TURN  ACTION                    SCENE  TYPING     SYNC WAIT  TOTAL",
-    "----  ------------------------  -----  ---------  ---------  ---------",
+    "TURN  ACTION                    SCENE  TYPING     SYNC WAIT  HYDRATE    TOTAL",
+    "----  ------------------------  -----  ---------  ---------  ---------  ---------",
   ];
 
   for (const r of records) {
     const action = (r.userAction ?? "(opening)").slice(0, 24).padEnd(24);
+    const hydrate =
+      r.hydrateMs !== undefined ? formatMs(r.hydrateMs).padStart(9) : "        —";
     lines.push(
-      `${String(r.turn).padStart(4)}  ${action}  ${String(r.sceneChars).padStart(5)}  ${formatMs(r.typingMs).padStart(9)}  ${formatMs(r.syncWaitMs).padStart(9)}  ${formatMs(r.totalMs).padStart(9)}`
+      `${String(r.turn).padStart(4)}  ${action}  ${String(r.sceneChars).padStart(5)}  ${formatMs(r.typingMs).padStart(9)}  ${formatMs(r.syncWaitMs).padStart(9)}  ${hydrate}  ${formatMs(r.totalMs).padStart(9)}`
     );
   }
 
   const last = records[records.length - 1];
   lines.push("");
-  lines.push(
-    `Last turn: ${formatMs(last.syncWaitMs)} syncing after scene (${formatMs(last.typingMs)} typing, ${formatMs(last.totalMs)} total)`
-  );
+  if (last.hydrateMs !== undefined) {
+    lines.push(
+      `Last turn: ${formatMs(last.typingMs)} to scene, ${formatMs(last.hydrateMs)} hydration (${formatMs(last.totalMs)} total)`
+    );
+  } else if (last.syncWaitMs > 0) {
+    lines.push(
+      `Last turn: ${formatMs(last.syncWaitMs)} syncing after scene (${formatMs(last.typingMs)} typing, ${formatMs(last.totalMs)} total)`
+    );
+  } else {
+    lines.push(
+      `Last turn: ${formatMs(last.typingMs)} typing, ${formatMs(last.totalMs)} total`
+    );
+  }
 
   return lines.join("\n");
 }

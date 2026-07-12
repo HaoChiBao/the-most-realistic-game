@@ -239,3 +239,23 @@ export function resolveCanonicalAssistantContent(
 
   return rewriteWorldState(rawContent, merged);
 }
+
+/** Merge a background hydration delta into the Phase A opening assistant turn. */
+export function mergeHydrationIntoOpening(
+  openingContent: string,
+  hydrationRaw: string
+): string {
+  const delta = extractStateJson(hydrationRaw);
+  if (!delta || typeof delta !== "object") return openingContent;
+
+  const prev = extractStateJson(openingContent);
+  const merged =
+    prev && typeof prev === "object"
+      ? mergeDeltaState(
+          prev as Record<string, unknown>,
+          delta as Record<string, unknown>
+        )
+      : (delta as Record<string, unknown>);
+
+  return rewriteWorldState(openingContent, merged);
+}

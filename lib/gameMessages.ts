@@ -1,10 +1,15 @@
-import { OPENING_INSTRUCTION, SYSTEM_PROMPT } from "@/lib/systemPrompt";
+import {
+  OPENING_HYDRATION_INSTRUCTION,
+  OPENING_PRESENT_INSTRUCTION,
+  SYSTEM_PROMPT,
+} from "@/lib/systemPrompt";
 import type { RandomRollResult } from "@/lib/randomness";
 import type { ActionConsequenceResult } from "@/lib/actionConsequence";
 import { buildOpeningInstruction, decodeSeed } from "@/lib/worldSpec";
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 export type ClientTurn = { role: "user" | "assistant"; content: string };
+export type OpeningPhase = "present" | "hydrate";
 
 const MAX_HISTORY = 40;
 /** Exported for API route + client — LLM only ever sees this many turns. */
@@ -23,16 +28,32 @@ export function buildGameMessages(
   history: ClientTurn[],
   seedCode?: string | null,
   roll?: RandomRollResult | null,
-  consequence?: ActionConsequenceResult | null
+  consequence?: ActionConsequenceResult | null,
+  openingPhase?: OpeningPhase | null
 ): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
 
   const trimmed = history.slice(-MAX_HISTORY);
-  if (trimmed.length === 0 || trimmed[0].role !== "user") {
-    const spec = seedCode ? decodeSeed(seedCode) : null;
+
+  if (openingPhase === "hydrate") {
+    const opening = trimmed.find((t) => t.role === "assistant");
+    if (!opening) {
+      throw new Error("hydrate phase requires an assistant opening turn");
+    }
+    messages.push({ role: "assistant", content: opening.content.slice(0, 8000) });
     messages.push({
       role: "user",
-      content: buildOpeningInstruction(OPENING_INSTRUCTION, spec),
+      content: OPENING_HYDRATION_INSTRUCTION,
+    });
+    return messages;
+  }
+
+  if (trimmed.length === 0 || trimmed[0].role !== "user") {
+    const spec = seedCode ? decodeSeed(seedCode) : null;
+    const instruction = OPENING_PRESENT_INSTRUCTION;
+    messages.push({
+      role: "user",
+      content: buildOpeningInstruction(instruction, spec),
     });
   }
 
