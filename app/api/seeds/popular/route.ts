@@ -7,7 +7,13 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const supabase = getSupabase();
   if (!supabase) {
-    return NextResponse.json({ worlds: [] });
+    return NextResponse.json(
+      {
+        error: "Seed storage is not configured on the server.",
+        worlds: [],
+      },
+      { status: 503 }
+    );
   }
 
   const limitParam = Number(req.nextUrl.searchParams.get("limit") ?? "24");
@@ -20,7 +26,10 @@ export async function GET(req: NextRequest) {
     p_limit: limit,
   });
   if (error) {
-    return NextResponse.json({ worlds: [] });
+    return NextResponse.json(
+      { error: "Could not load shared worlds.", worlds: [] },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ worlds: data ?? [] });
