@@ -89,6 +89,11 @@ body {
   flex-direction: column;
 }
 
+.screen--loading {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .log {
   flex: 1;
   min-height: 0;
@@ -655,11 +660,164 @@ a.restart {
   }
 }
 
+/* ---- World loading (Minecraft-style gate) ---- */
+.world-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(ellipse at center, rgba(0, 20, 0, 0.55) 0%, rgba(0, 7, 0, 0.96) 70%),
+    var(--bg);
+  pointer-events: all;
+  opacity: 1;
+  transition: opacity 0.4s ease;
+}
+
+.world-loading--exit {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.world-loading__inner {
+  width: min(520px, 92%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.world-loading__title {
+  font-size: clamp(18px, 3.2vmin, 28px);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--phosphor);
+  text-shadow: 0 0 10px var(--phosphor-glow);
+}
+
+.world-loading__seed {
+  font-size: clamp(11px, 1.6vmin, 13px);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--phosphor-dim);
+  opacity: 0.85;
+  min-height: 1.2em;
+}
+
+.world-loading__seed--ghost {
+  opacity: 0.45;
+}
+
+.world-loading__bar {
+  width: 100%;
+  height: 14px;
+  margin-top: 10px;
+  border: 1px solid rgba(51, 255, 102, 0.45);
+  background: rgba(0, 0, 0, 0.55);
+  box-shadow: 0 0 12px rgba(51, 255, 102, 0.12) inset;
+  overflow: hidden;
+}
+
+.world-loading__bar-fill {
+  height: 100%;
+  width: 0%;
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      var(--phosphor) 0,
+      var(--phosphor) 8px,
+      var(--phosphor-dim) 8px,
+      var(--phosphor-dim) 16px
+    );
+  box-shadow: 0 0 10px var(--phosphor-glow);
+  transition: width 0.08s linear;
+  animation: world-loading-stripe 0.8s linear infinite;
+  background-size: 22px 22px;
+}
+
+.world-loading__pct {
+  font-size: clamp(12px, 1.8vmin, 15px);
+  letter-spacing: 0.12em;
+  color: var(--phosphor);
+  opacity: 0.9;
+}
+
+.world-loading__status {
+  font-size: clamp(13px, 2vmin, 17px);
+  color: var(--phosphor-dim);
+  min-height: 1.4em;
+  animation: blink 1.4s steps(1) infinite;
+}
+
+.world-loading__chunks {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  height: 10px;
+}
+
+.world-loading__chunk {
+  width: 14px;
+  height: 10px;
+  border: 1px solid rgba(51, 255, 102, 0.2);
+  background: transparent;
+  opacity: 0.35;
+  transition: background 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+}
+
+.world-loading__chunk--on {
+  background: var(--phosphor);
+  opacity: 1;
+  box-shadow: 0 0 8px var(--phosphor-glow);
+  animation: world-loading-chunk 0.9s steps(2) infinite;
+}
+
+.world-loading__tip {
+  margin-top: 22px;
+  max-width: 42ch;
+  font-size: clamp(12px, 1.8vmin, 15px);
+  line-height: 1.45;
+  color: var(--phosphor-dim);
+  opacity: 0.8;
+}
+
+.world-loading__tip-label {
+  display: inline-block;
+  margin-right: 0.6em;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--phosphor);
+  opacity: 0.7;
+}
+
+@keyframes world-loading-stripe {
+  to {
+    background-position: 22px 0;
+  }
+}
+
+@keyframes world-loading-chunk {
+  50% {
+    opacity: 0.55;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .crt {
     animation: none;
   }
   .cursor {
+    animation: none;
+  }
+  .world-loading {
+    transition: none;
+  }
+  .world-loading__bar-fill,
+  .world-loading__status,
+  .world-loading__chunk--on {
     animation: none;
   }
 }

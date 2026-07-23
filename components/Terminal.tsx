@@ -26,6 +26,9 @@ import {
 } from "@/lib/save";
 import { MAX_HISTORY_MESSAGES } from "@/lib/gameMessages";
 import DebugPanel from "@/components/DebugPanel";
+import WorldLoadingScreen, {
+  type WorldLoadingPhase,
+} from "@/components/WorldLoadingScreen";
 import { makeSeedCode, parseSeedCode } from "@/lib/seed";
 import {
   preloadTypingSound,
@@ -105,6 +108,15 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const [sharing, setSharing] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugTick, setDebugTick] = useState(0);
+  const [worldLoading, setWorldLoading] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const saved = loadSession();
+    return !(saved && canRestoreSession(saved, seedCode));
+  });
+  const [loadingPhase, setLoadingPhase] = useState<WorldLoadingPhase>("boot");
+  const [loadingSeedCode, setLoadingSeedCode] = useState<string | null>(
+    seedCode ?? null
+  );
 
   const historyRef = useRef<Turn[]>([]);
   const syncTimingsRef = useRef<SyncTimingRecord[]>([]);
@@ -374,6 +386,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const streamOpeningPresent = useCallback(async () => {
     const myRun = runIdRef.current;
     setBusy(true);
+    setWorldLoading(true);
+    setLoadingPhase("generating");
     setSceneReady(false);
     sceneReadyRef.current = false;
     setWorldReady(false);
@@ -402,10 +416,12 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       if (inputUnlocked || myRun !== runIdRef.current) return;
       inputUnlocked = true;
       if (sceneRevealedAt === null) sceneRevealedAt = ts;
+      setLoadingPhase("done");
       setSceneReady(true);
       sceneReadyRef.current = true;
       setBusy(false);
       syncTypingSound(false);
+      setWorldLoading(false);
       focusInput();
     };
 
@@ -448,6 +464,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       if (reveal > 0 && hasMoreToShow) {
         acc -= reveal;
         shown = Math.min(received.length, shown + reveal);
+        if (shown > 0) setLoadingPhase("revealing");
         setEntryText(engineId, received.slice(0, shown));
         scrollToBottom();
       }
@@ -508,6 +525,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
           setEntries((prev) => prev.filter((e) => e.id !== engineId));
           addEntry("error", detail || `ENGINE ERROR [${res.status}].`);
           setBusy(false);
+          setWorldLoading(false);
           focusInput();
           return;
         }
@@ -540,6 +558,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         setEntries((prev) => prev.filter((e) => e.id !== engineId));
         addEntry("error", `SIGNAL LOST. ${String(err)}`);
         setBusy(false);
+        setWorldLoading(false);
         focusInput();
       }
     }
@@ -800,6 +819,9 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     async (code: string) => {
       const myRun = runIdRef.current;
       setBusy(true);
+      setWorldLoading(true);
+      setLoadingPhase("loading-seed");
+      setLoadingSeedCode(code);
       try {
         const res = await fetch(`/api/seed/${code}`);
         const data = await res.json().catch(() => ({}));
@@ -810,6 +832,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
             data.error || `NO WORLD FOUND FOR SEED ${code}. Generating a new one.`
           );
           setBusy(false);
+          setWorldLoading(false);
           await streamTurn();
           return;
         }
@@ -820,18 +843,23 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         openingWorldRef.current = { ...turn };
         seedRef.current = code;
         addEntry("system", `SEED ${code} LOADED.`);
+        setLoadingPhase("revealing");
         await revealText(String(data.opening).trim());
+        if (myRun !== runIdRef.current) return;
+        setLoadingPhase("done");
         setSceneReady(true);
         sceneReadyRef.current = true;
         setWorldReady(true);
         worldReadyRef.current = true;
         setBusy(false);
+        setWorldLoading(false);
         focusInput();
         persistSession();
       } catch (err) {
         if (myRun !== runIdRef.current) return;
         addEntry("error", `COULD NOT LOAD SEED. ${String(err)}`);
         setBusy(false);
+        setWorldLoading(false);
         await streamTurn();
       }
     },
@@ -870,6 +898,9 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     setWorldReady(false);
     setSharing(false);
     setDebugOpen(false);
+    setWorldLoading(true);
+    setLoadingPhase("boot");
+    setLoadingSeedCode(null);
   }, []);
 
   const fetchEngineVersion = useCallback(async () => {
@@ -888,6 +919,10 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const beginFreshWorld = useCallback(async () => {
     const myRun = runIdRef.current;
     const stillActive = () => myRun === runIdRef.current;
+
+    setWorldLoading(true);
+    setLoadingPhase("boot");
+    setLoadingSeedCode(seedCode ?? seedRef.current);
 
     let engineLine = "REALITY ENGINE v5.5  //  ONLINE";
     try {
@@ -921,15 +956,18 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     if (seedCode) {
       seedRef.current = seedCode;
       seedSavedRef.current = true;
+      setLoadingSeedCode(seedCode);
       await loadSeed(seedCode);
     } else {
       if (!seedRef.current) {
         seedRef.current = makeSeedCode();
         seedSavedRef.current = false;
       }
+      setLoadingSeedCode(seedRef.current);
+      setLoadingPhase("generating");
       await streamOpeningPresent();
     }
-  }, [addEntry, streamOpeningPresent, loadSeed, seedCode, fetchEngineVersion]);
+  }, [addEntry, streamOpeningPresent, loadSeed, seedCode]);
 
   const boot = useCallback(async () => {
     void fetchEngineVersion();
@@ -968,6 +1006,9 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       setSceneReady(true);
       sceneReadyRef.current = true;
       setBooted(true);
+      setWorldLoading(false);
+      setLoadingPhase("done");
+      setLoadingSeedCode(saved.seedCode);
       if (
         !saved.worldReady &&
         historyRef.current.length === 1 &&
@@ -1004,14 +1045,15 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   }, []);
 
   useEffect(() => {
+    if (worldLoading) return;
     inputRef.current?.focus();
-  }, []);
+  }, [worldLoading]);
 
   const submit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
       const value = input.trim().slice(0, MAX_INPUT);
-      if (!value || !booted) return;
+      if (!value || !booted || worldLoading) return;
 
       if (isDevCommand(value)) {
         setInput("");
@@ -1019,7 +1061,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         return;
       }
 
-      if (busy || ended || !sceneReady) return;
+      if (worldLoading || busy || ended || !sceneReady) return;
       saveCheckpoint();
       setInput("");
       if (softEnded) {
@@ -1060,6 +1102,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       busy,
       ended,
       booted,
+      worldLoading,
       sceneReady,
       softEnded,
       addEntry,
@@ -1207,6 +1250,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     <div
       className="crt"
       onClick={() => {
+        if (worldLoading) return;
         // Don't steal focus after a text selection — focusing the input
         // clears the highlight immediately.
         const sel = window.getSelection();
@@ -1214,7 +1258,14 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         inputRef.current?.focus();
       }}
     >
-      <div className="screen">
+      <WorldLoadingScreen
+        active={worldLoading}
+        phase={loadingPhase}
+        seedCode={loadingSeedCode}
+        isSharedSeed={Boolean(seedCode)}
+      />
+
+      <div className={`screen${worldLoading ? " screen--loading" : ""}`}>
         <div className="log" ref={logRef}>
           {entries.map((entry) => (
             <div key={entry.id} className={`entry ${entry.type}`}>
@@ -1257,6 +1308,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
               autoCorrect="off"
               spellCheck={false}
               aria-label="game input"
+              disabled={worldLoading}
             />
             {sendLocked && (
               <span className="send-lock">
