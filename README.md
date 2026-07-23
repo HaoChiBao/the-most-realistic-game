@@ -41,17 +41,26 @@ server and is never exposed to the browser.
 
 ## Configuration
 
-| Variable       | Default                                  | Notes                              |
-| -------------- | ---------------------------------------- | ---------------------------------- |
-| `NIM_API_KEY`  | —                                        | Required. Your NVIDIA NIM key.     |
-| `NIM_MODEL`    | `deepseek-ai/deepseek-v4-pro`            | Any DeepSeek model on NIM.         |
-| `NIM_BASE_URL` | `https://integrate.api.nvidia.com/v1`    | OpenAI-compatible endpoint.        |
+| Variable                     | Default                               | Notes                                                                 |
+| ---------------------------- | ------------------------------------- | --------------------------------------------------------------------- |
+| `OPENAI_API_KEY`             | —                                     | Preferred. OpenAI (or compatible) key for the game engine.            |
+| `OPENAI_MODEL`               | `gpt-4.1-mini`                        | Model id when using OpenAI.                                           |
+| `NIM_API_KEY`                | —                                     | Legacy fallback if `OPENAI_API_KEY` is unset. NVIDIA NIM key.         |
+| `NIM_MODEL`                  | `deepseek-ai/deepseek-v4-pro`         | Any DeepSeek model on NIM.                                            |
+| `NIM_BASE_URL`               | `https://integrate.api.nvidia.com/v1` | OpenAI-compatible NIM endpoint.                                       |
+| `SUPABASE_URL`               | —                                     | Required for share world / gallery. Project URL.                      |
+| `SUPABASE_SERVICE_ROLE_KEY`  | —                                     | Server-only. Preferred for seed RPCs (`create_world`, `load_world`).  |
+| `SUPABASE_ANON_KEY`          | —                                     | Fallback for local/dev if the service role key is missing.            |
+
+Copy `.env.example` → `.env.local` for the full template. Seed sharing stores
+turn-1 SCENE + WORLD in Supabase (`public.worlds` via SECURITY DEFINER RPCs).
+Schema changes live under `supabase/migrations/`.
 
 ## Deploying to Vercel
 
 Push to a Git repo, import the project in Vercel, and add the environment
-variables above in Project Settings → Environment Variables. No other
-configuration is required.
+variables above in Project Settings → Environment Variables (including the
+Supabase vars if you want share world / gallery to work in production).
 
 ## Design notes
 

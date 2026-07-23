@@ -23,6 +23,10 @@ export default function GalleryPage() {
         const res = await fetch("/api/seeds/popular?limit=48");
         const data = await res.json().catch(() => ({}));
         if (!alive) return;
+        if (!res.ok) {
+          setStatus("error");
+          return;
+        }
         const list: World[] = Array.isArray(data.worlds) ? data.worlds : [];
         setWorlds(list);
         setStatus(list.length ? "ready" : "empty");
@@ -67,6 +71,14 @@ export default function GalleryPage() {
             worlds.map((w) => (
               <a key={w.code} className="world-card" href={`/s/${w.code}`}>
                 <div className="world-setting">{w.setting || "unknown world"}</div>
+                {w.opening && (
+                  <div className="world-opening">
+                    {w.opening.replace(/\s+/g, " ").trim().slice(0, 140)}
+                    {w.opening.replace(/\s+/g, " ").trim().length > 140
+                      ? "…"
+                      : ""}
+                  </div>
+                )}
                 <div className="world-meta">
                   <span>SEED {w.code}</span>
                   <span>
