@@ -3,7 +3,11 @@ import {
   OPENING_INSTRUCTION,
   SYSTEM_PROMPT,
 } from "@/lib/systemPrompt";
-import { getProviderBanner } from "@/lib/llm";
+import {
+  getModelLabel,
+  getProviderBanner,
+  getProviderLabel,
+} from "@/lib/llm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +23,8 @@ export async function GET(req: Request) {
       ? {
           systemPrompt: SYSTEM_PROMPT,
           openingInstruction: OPENING_INSTRUCTION,
+          model: getModelLabel(),
+          provider: getProviderLabel(),
         }
       : {}),
   });

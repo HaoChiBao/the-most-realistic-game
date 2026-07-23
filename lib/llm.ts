@@ -40,15 +40,16 @@ export function getLlmConfig(): LlmConfig | null {
   return null;
 }
 
-// Human-readable model id stored alongside shared seeds.
+// Human-readable model id stored alongside shared seeds / debug.
 export function getModelLabel(): string {
   return getLlmConfig()?.model ?? "unknown";
 }
 
-// Short label for the terminal boot banner.
+export function getProviderLabel(): LlmProvider | "none" {
+  return getLlmConfig()?.provider ?? "none";
+}
+
+// Short status for the terminal boot banner (model lives on the debug panel).
 export function getProviderBanner(): string {
-  const cfg = getLlmConfig();
-  if (!cfg) return "OFFLINE";
-  if (cfg.provider === "openai") return cfg.model.toUpperCase();
-  return "DEEPSEEK CORE";
+  return getLlmConfig() ? "ONLINE" : "OFFLINE";
 }

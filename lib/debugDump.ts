@@ -50,6 +50,8 @@ export type DebugSection = {
 
 export type SessionDebugMeta = {
   engineVersion?: string;
+  model?: string | null;
+  provider?: string | null;
   seedCode: string | null;
   dialCode?: string | null;
   instanceId?: string | null;
@@ -114,6 +116,8 @@ export function buildDebugSections(opts: {
     kind: "json",
     body: pretty({
       engineVersion: meta.engineVersion ?? null,
+      model: meta.model ?? null,
+      provider: meta.provider ?? null,
       seedCode: meta.seedCode,
       dialCode: meta.dialCode ?? null,
       instanceId: meta.instanceId ?? null,

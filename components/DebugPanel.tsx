@@ -53,6 +53,10 @@ export default function DebugPanel({ open, onClose, history, meta }: Props) {
   const [engineVersion, setEngineVersion] = useState<string | undefined>(
     meta.engineVersion
   );
+  const [model, setModel] = useState<string | null>(meta.model ?? null);
+  const [provider, setProvider] = useState<string | null>(
+    meta.provider ?? null
+  );
   const [activeId, setActiveId] = useState("session");
   const [copied, setCopied] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -75,6 +79,8 @@ export default function DebugPanel({ open, onClose, history, meta }: Props) {
             : null
         );
         if (typeof data.version === "string") setEngineVersion(data.version);
+        if (typeof data.model === "string") setModel(data.model);
+        if (typeof data.provider === "string") setProvider(data.provider);
         setLoadError(null);
       } catch (err) {
         if (!cancelled) setLoadError(String(err));
@@ -119,6 +125,8 @@ export default function DebugPanel({ open, onClose, history, meta }: Props) {
       meta: {
         ...meta,
         engineVersion: engineVersion ?? meta.engineVersion,
+        model: model ?? meta.model ?? null,
+        provider: provider ?? meta.provider ?? null,
         dialCode: parsed?.dial_code ?? null,
         instanceId: parsed?.instance_id || null,
       },
@@ -127,7 +135,15 @@ export default function DebugPanel({ open, onClose, history, meta }: Props) {
       worldSpecJson,
       seedDialTable,
     });
-  }, [history, meta, systemPrompt, openingInstruction, engineVersion]);
+  }, [
+    history,
+    meta,
+    systemPrompt,
+    openingInstruction,
+    engineVersion,
+    model,
+    provider,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -178,6 +194,8 @@ export default function DebugPanel({ open, onClose, history, meta }: Props) {
             <div className="debug-title">ENGINE DEBUG</div>
             <div className="debug-sub">
               organized dump · copy any section · Esc to close
+              {model ? ` · model ${model}` : ""}
+              {provider ? ` · ${provider}` : ""}
               {loadError ? ` · prompt fetch failed: ${loadError}` : ""}
             </div>
           </div>
