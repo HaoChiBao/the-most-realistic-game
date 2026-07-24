@@ -4,7 +4,13 @@
  */
 
 import { resolveActionConsequence } from "@/lib/actionConsequence";
-import { extractCharactersFromState, formatCharactersOverview } from "@/lib/characterDebug";
+import {
+  extractCharactersFromState,
+  formatCharactersOverview,
+  formatVitalsOverview,
+  vitalsFromCharacter,
+  vitalsFromPlayer,
+} from "@/lib/characterDebug";
 import {
   extractConditionsFromState,
   formatConditionsOverview,
@@ -224,10 +230,70 @@ const COMMANDS: CmdDef[] = [
       const block = needWorld(ctx);
       if (block) return block;
       const s = lastState(ctx);
+      const player = s?.player as Record<string, unknown> | undefined;
+      const vitals = vitalsFromPlayer(player);
       return {
         lines: [
           ...header("PLAYER"),
-          pretty(s?.player ?? "(no player object)"),
+          ...(vitals ? [formatVitalsOverview(vitals), ""] : []),
+          "— full player JSON —",
+          pretty(player ?? "(no player object)"),
+        ],
+      };
+    },
+  },
+  {
+    name: "health",
+    aliases: ["hp", "vitals", "body", "me"],
+    category: "State",
+    blurb: "Readable hp/body/skills — player, or /health <npc>",
+    needsWorld: true,
+    run: (args, ctx) => {
+      const block = needWorld(ctx);
+      if (block) return block;
+      const state = lastState(ctx);
+      if (!args) {
+        const vitals = vitalsFromPlayer(
+          state?.player as Record<string, unknown> | undefined
+        );
+        if (!vitals) {
+          return { lines: [...header("HEALTH"), "(no player in STATE)"] };
+        }
+        return { lines: [...header("HEALTH"), formatVitalsOverview(vitals)] };
+      }
+
+      const bundle = extractCharactersFromState(state);
+      if (!bundle) {
+        return {
+          lines: [...header("HEALTH"), "(could not parse characters[])"],
+        };
+      }
+      const q = args.toLowerCase();
+      const matches = bundle.characters.filter(
+        (c) =>
+          c.id.toLowerCase().includes(q) ||
+          (c.name?.toLowerCase().includes(q) ?? false) ||
+          (c.role?.toLowerCase().includes(q) ?? false)
+      );
+      if (matches.length === 0) {
+        return {
+          lines: [
+            ...header("HEALTH"),
+            `No NPC matching "${args}". Try /npcs.`,
+          ],
+        };
+      }
+      return {
+        lines: [
+          ...header(
+            matches.length === 1
+              ? "HEALTH"
+              : `HEALTH (${matches.length} matches)`
+          ),
+          ...matches.flatMap((c, i) => [
+            ...(i > 0 ? [""] : []),
+            formatVitalsOverview(vitalsFromCharacter(c)),
+          ]),
         ],
       };
     },
@@ -245,9 +311,12 @@ const COMMANDS: CmdDef[] = [
       if (!p) {
         return { lines: [...header("TRAITS"), "(no player in STATE)"] };
       }
+      const vitals = vitalsFromPlayer(p);
       return {
         lines: [
           ...header("TRAITS / STATS"),
+          ...(vitals ? [formatVitalsOverview(vitals), ""] : []),
+          "— raw JSON —",
           pretty({
             stats: p.stats,
             body: p.body,
