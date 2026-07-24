@@ -1,5 +1,20 @@
 [
   {
+    "id": "2026-07-24-remove-worlds-gallery",
+    "version": "0.7.4",
+    "engine": "v6.0",
+    "date": "2026-07-24",
+    "significance": 55,
+    "title": "Remove shared-worlds gallery",
+    "summary": "Players no longer browse or pick other people's worlds. Share world still saves a seed and copies a /s/ link — discovery via gallery is gone.",
+    "tags": ["ux", "sharing"],
+    "changes": [
+      "Removed worlds nav links from the terminal and patch notes",
+      "/gallery redirects home; popular-worlds API retired",
+      "share world + /s/[code] deep links unchanged"
+    ]
+  },
+  {
     "id": "2026-07-24-opening-player-bootstrap",
     "version": "0.7.3",
     "engine": "v6.0",

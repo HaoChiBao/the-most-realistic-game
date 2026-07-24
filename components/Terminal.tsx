@@ -1426,9 +1426,6 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
             >
               {sharing ? "saving..." : "share world"}
             </button>
-            <a className="restart" href="/gallery" style={{ marginLeft: 12 }}>
-              worlds
-            </a>
             <a className="restart" href="/patch-notes" style={{ marginLeft: 12 }}>
               patch notes
             </a>

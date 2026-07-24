@@ -48,7 +48,7 @@ server and is never exposed to the browser.
 | `NIM_API_KEY`                | —                                     | Legacy fallback if `OPENAI_API_KEY` is unset. NVIDIA NIM key.         |
 | `NIM_MODEL`                  | `deepseek-ai/deepseek-v4-pro`         | Any DeepSeek model on NIM.                                            |
 | `NIM_BASE_URL`               | `https://integrate.api.nvidia.com/v1` | OpenAI-compatible NIM endpoint.                                       |
-| `SUPABASE_URL`               | —                                     | Required for share world / gallery. Project URL.                      |
+| `SUPABASE_URL`               | —                                     | Required for share world. Project URL.                                |
 | `SUPABASE_SERVICE_ROLE_KEY`  | —                                     | Server-only. Preferred for seed RPCs (`create_world`, `load_world`).  |
 | `SUPABASE_ANON_KEY`          | —                                     | Fallback for local/dev if the service role key is missing.            |
 
@@ -72,7 +72,7 @@ injection, seed/world-spec dials, randomness, conditions, and dev commands.
 
 Push to a Git repo, import the project in Vercel, and add the environment
 variables above in Project Settings → Environment Variables (including the
-Supabase vars if you want share world / gallery to work in production).
+Supabase vars if you want share world to work in production).
 
 ## Design notes
 

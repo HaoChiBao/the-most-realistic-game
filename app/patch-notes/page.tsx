@@ -36,9 +36,6 @@ export default function PatchNotesPage() {
         <div className="gallery-head">
           <span>PATCH NOTES  //  DEVLOG</span>
           <span className="patch-head-links">
-            <a className="restart" href="/gallery">
-              worlds
-            </a>
             <a className="restart" href="/">
               new world
             </a>
@@ -100,9 +97,6 @@ export default function PatchNotesPage() {
         <div className="meta">
           <span>THE MOST REALISTIC GAME</span>
           <span className="controls">
-            <a className="restart" href="/gallery" style={{ marginLeft: 12 }}>
-              worlds
-            </a>
             <a className="restart" href="/" style={{ marginLeft: 12 }}>
               back to terminal
             </a>
