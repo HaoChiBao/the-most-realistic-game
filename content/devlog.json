@@ -1,5 +1,21 @@
 [
   {
+    "id": "2026-07-24-opening-player-bootstrap",
+    "version": "0.7.3",
+    "engine": "v6.0",
+    "date": "2026-07-24",
+    "significance": 90,
+    "title": "Fix missing player after world hydration",
+    "summary": "Phase B hydration could wipe the player sheet when Phase A STATE failed to parse. Merges now scaffold bootstrap fields, Phase A gets a higher token budget, and CI runs the unit suite on every PR.",
+    "tags": ["engine", "bugfix", "opening", "ci"],
+    "changes": [
+      "Never replace unparseable Phase A STATE with a sparse hydrate delta",
+      "ensureBootstrapFields guarantees player body/stats after every merge",
+      "Phase A present max_tokens 500 → 900 so bootstrap JSON can close",
+      "New opening-hydrate regression tests + GitHub Actions CI (typecheck + npm test)"
+    ]
+  },
+  {
     "id": "2026-07-24-world-loading-gate",
     "version": "0.7.2",
     "engine": "v6.0",

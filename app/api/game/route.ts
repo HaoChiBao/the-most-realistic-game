@@ -108,8 +108,10 @@ export async function POST(req: NextRequest) {
     openingPhase
   );
 
+  // Phase A needs enough room to close bootstrap JSON (incl. full player sheet).
+  // 500 was truncating STATE mid-object → unparseable prev → hydrate wiped player.
   const maxTokens =
-    openingPhase === "present" ? 500 : openingPhase === "hydrate" ? 1400 : 1400;
+    openingPhase === "present" ? 900 : openingPhase === "hydrate" ? 1400 : 1400;
 
   const rollHeader = roll
     ? roll.fired
