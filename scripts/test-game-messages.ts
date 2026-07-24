@@ -4,9 +4,12 @@ function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
 }
 
-const opening = buildGameMessages([], "12345678901234");
+const opening = buildGameMessages([], "12345678901234", null, null, "present");
 const openingUser = opening.find((m) => m.role === "user");
-assert(openingUser?.content.includes("Turn 1 ONLY"), "opening asks for full STATE");
+assert(
+  openingUser?.content.includes("PHASE A"),
+  "opening asks for Phase A bootstrap STATE"
+);
 assert(
   !openingUser?.content.includes("DELTA ONLY"),
   "opening has no delta reminder"

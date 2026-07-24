@@ -56,6 +56,18 @@ Copy `.env.example` → `.env.local` for the full template. Seed sharing stores
 turn-1 SCENE + WORLD in Supabase (`public.worlds` via SECURITY DEFINER RPCs).
 Schema changes live under `supabase/migrations/`.
 
+## Tests & CI
+
+```bash
+npm run typecheck   # tsc --noEmit
+npm test            # run every scripts/test-*.ts file
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs typecheck + the unit suite on
+every pull request and push to `main`. Coverage includes opening present/hydrate
+merges (player bootstrap), delta STATE, scene parse, combat/consequence
+injection, seed/world-spec dials, randomness, conditions, and dev commands.
+
 ## Deploying to Vercel
 
 Push to a Git repo, import the project in Vercel, and add the environment
