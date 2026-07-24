@@ -6,6 +6,7 @@ export type WorldLoadingPhase =
   | "boot"
   | "generating"
   | "revealing"
+  | "hydrating"
   | "loading-seed"
   | "done";
 
@@ -30,7 +31,8 @@ const PHASE_FLOOR: Record<WorldLoadingPhase, number> = {
   boot: 4,
   "loading-seed": 18,
   generating: 32,
-  revealing: 68,
+  revealing: 62,
+  hydrating: 82,
   done: 100,
 };
 
@@ -38,7 +40,8 @@ const PHASE_CEILING: Record<WorldLoadingPhase, number> = {
   boot: 28,
   "loading-seed": 55,
   generating: 64,
-  revealing: 96,
+  revealing: 80,
+  hydrating: 96,
   done: 100,
 };
 
@@ -59,6 +62,8 @@ function statusForPhase(
         : "Generating reality...";
     case "revealing":
       return "Writing the opening scene...";
+    case "hydrating":
+      return "Hydrating world state...";
     case "done":
       return "Entering world...";
   }

@@ -300,9 +300,25 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   }, []);
 
   const hydrateWorld = useCallback(
-    async (myRun: number, presentTypingMs: number, sceneChars: number) => {
+    async (
+      myRun: number,
+      presentTypingMs: number,
+      sceneChars: number,
+      holdLoadingGate = false
+    ) => {
       const hydrateStart = performance.now();
       setWorldHydrating(true);
+      if (holdLoadingGate) setLoadingPhase("hydrating");
+
+      const dismissLoadingGate = () => {
+        if (!holdLoadingGate || myRun !== runIdRef.current) return;
+        setLoadingPhase("done");
+        window.setTimeout(() => {
+          if (myRun !== runIdRef.current) return;
+          setWorldLoading(false);
+          focusInput();
+        }, 320);
+      };
 
       const finishHydration = (hydrateMs: number, ok: boolean) => {
         if (myRun !== runIdRef.current) return;
@@ -324,6 +340,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
           setTimeout(() => persistSession(), 0);
         }
         hydrationPromiseRef.current = null;
+        // Fresh-world overlay stays up through Phase B; dismiss once hydration settles.
+        dismissLoadingGate();
       };
 
       try {
@@ -370,13 +388,24 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         finishHydration(Math.round(performance.now() - hydrateStart), false);
       }
     },
-    [addEntry, persistSession]
+    [addEntry, focusInput, persistSession]
   );
 
   const startHydration = useCallback(
-    (myRun: number, presentTypingMs: number, sceneChars: number) => {
+    (
+      myRun: number,
+      presentTypingMs: number,
+      sceneChars: number,
+      holdLoadingGate = false
+    ) => {
       if (hydrationPromiseRef.current) return;
-      const promise = hydrateWorld(myRun, presentTypingMs, sceneChars);
+      if (holdLoadingGate) setLoadingPhase("hydrating");
+      const promise = hydrateWorld(
+        myRun,
+        presentTypingMs,
+        sceneChars,
+        holdLoadingGate
+      );
       hydrationPromiseRef.current = promise;
       void promise;
     },
@@ -416,13 +445,11 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       if (inputUnlocked || myRun !== runIdRef.current) return;
       inputUnlocked = true;
       if (sceneRevealedAt === null) sceneRevealedAt = ts;
-      setLoadingPhase("done");
+      // Scene is ready, but keep the loading gate up until hydration finishes.
       setSceneReady(true);
       sceneReadyRef.current = true;
       setBusy(false);
       syncTypingSound(false);
-      setWorldLoading(false);
-      focusInput();
     };
 
     const finishPresent = () => {
@@ -450,7 +477,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       openingWorldRef.current = { ...assistantTurn };
 
       const typingMs = Math.round((sceneRevealedAt ?? finishedAt) - turnStart);
-      startHydration(myRun, typingMs, cleanScene.length);
+      startHydration(myRun, typingMs, cleanScene.length, true);
       setTimeout(() => persistSession(), 0);
     };
 
