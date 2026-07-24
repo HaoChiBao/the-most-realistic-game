@@ -370,6 +370,12 @@ trust_to_player is -100..+100 (relationship only).
 Booleans: conscious, alive, known_to_player, witnesses.
 body parts: ok | bruised | cut | broken | shot | missing.
 
+HP AUTHORITY: A dedicated server health tracker classifies harm after violent /
+injury turns and writes player.stats.hp (start 100; 0 = dead, alive false).
+When you see [HEALTH — server authoritative], treat those HP numbers as FACT —
+do not heal or invent different hp that turn. Still narrate injuries in [SCENE]
+and keep body{} / conditions[] consistent with the hit.
+
 When a character is FIRST named in [SCENE], add a full sheet that same turn
 (all persona fields — see NPC REGISTRY). Update EVERY character sheet EVERY
 turn in the background. Never dump stats into [SCENE].

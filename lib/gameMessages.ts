@@ -29,7 +29,9 @@ export function buildGameMessages(
   seedCode?: string | null,
   roll?: RandomRollResult | null,
   consequence?: ActionConsequenceResult | null,
-  openingPhase?: OpeningPhase | null
+  openingPhase?: OpeningPhase | null,
+  /** Prior-turn health tracker mandate (HP already applied in STATE). */
+  healthBlock?: string | null
 ): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
 
@@ -77,6 +79,7 @@ export function buildGameMessages(
       const injections: string[] = [];
       if (consequence?.fired) injections.push(consequence.prompt_block);
       if (roll) injections.push(roll.prompt_block);
+      if (healthBlock?.trim()) injections.push(healthBlock.trim());
       if (hasPriorWorld) injections.push(DELTA_STATE_REMINDER);
       if (injections.length > 0) {
         content = `${content}\n\n${injections.join("\n\n")}`;

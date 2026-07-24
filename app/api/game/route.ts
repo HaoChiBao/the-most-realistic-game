@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
     history?: ClientTurn[];
     seedCode?: string;
     openingPhase?: OpeningPhase;
+    healthBlock?: string;
   };
   try {
     body = await req.json();
@@ -100,12 +101,18 @@ export async function POST(req: NextRequest) {
       : resolveRollForHistory(history, seedCode);
   const consequence =
     openingPhase === "hydrate" ? null : resolveActionConsequence(history);
+  const healthBlock =
+    typeof body.healthBlock === "string" && body.healthBlock.length < 1200
+      ? body.healthBlock
+      : null;
+
   const messages = buildGameMessages(
     history,
     seedCode,
     roll,
     consequence,
-    openingPhase
+    openingPhase,
+    healthBlock
   );
 
   const maxTokens =

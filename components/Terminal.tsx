@@ -126,6 +126,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const worldHydratingRef = useRef(false);
   const hydrationPromiseRef = useRef<Promise<void> | null>(null);
   const engineVersionRef = useRef<string | undefined>(undefined);
+  /** Prior-turn health mandate injected into the next /api/game call. */
+  const pendingHealthBlockRef = useRef<string | null>(null);
 
   const nextId = () => ++idRef.current;
 
@@ -593,74 +595,137 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       if (myRun === runIdRef.current) setWorldSyncing(on);
     };
 
+    let finalizing = false;
     const finish = () => {
-      if (finished || myRun !== runIdRef.current) return;
-      finished = true;
-      const finishedAt = performance.now();
-      const cleanScene = coalesceSceneText(received);
-      if (sceneRevealedAt === null && cleanScene.length > 0) {
-        sceneRevealedAt = finishedAt;
-      }
-      const record: SyncTimingRecord = {
-        turn: turnNumber,
-        userAction: lastUserAction,
-        sceneChars: cleanScene.length,
-        typingMs: Math.round((sceneRevealedAt ?? finishedAt) - turnStart),
-        syncWaitMs: Math.round(
-          syncGapStart !== null ? finishedAt - syncGapStart : 0
-        ),
-        totalMs: Math.round(finishedAt - turnStart),
-        phase: "play",
-      };
-      syncTimingsRef.current = [...syncTimingsRef.current, record].slice(-40);
-      if (record.syncWaitMs > 0) {
-        setLastSyncWaitSec(formatSyncWaitSec(record.syncWaitMs));
-      }
-      syncTypingSound(false);
-      setSyncing(false);
-      setEntryText(engineId, cleanScene);
+      if (finished || finalizing || myRun !== runIdRef.current) return;
+      finalizing = true;
 
-      let cleanRaw = ensureAssistantHasScene(stripControlTokens(rawFull));
-      const canonicalContent = resolveCanonicalAssistantContent(
-        historyRef.current,
-        cleanRaw || cleanScene
-      );
-      const assistantTurn: Turn = {
-        role: "assistant",
-        content: canonicalContent,
-      };
-      historyRef.current.push(assistantTurn);
+      void (async () => {
+        const finishedAt = performance.now();
+        const cleanScene = coalesceSceneText(received);
+        if (sceneRevealedAt === null && cleanScene.length > 0) {
+          sceneRevealedAt = finishedAt;
+        }
+        const record: SyncTimingRecord = {
+          turn: turnNumber,
+          userAction: lastUserAction,
+          sceneChars: cleanScene.length,
+          typingMs: Math.round((sceneRevealedAt ?? finishedAt) - turnStart),
+          syncWaitMs: Math.round(
+            syncGapStart !== null ? finishedAt - syncGapStart : 0
+          ),
+          totalMs: Math.round(finishedAt - turnStart),
+          phase: "play",
+        };
+        syncTimingsRef.current = [...syncTimingsRef.current, record].slice(-40);
+        if (record.syncWaitMs > 0) {
+          setLastSyncWaitSec(formatSyncWaitSec(record.syncWaitMs));
+        }
+        syncTypingSound(false);
+        setSyncing(false);
+        setEntryText(engineId, cleanScene);
 
-      if (!openingWorldRef.current) {
-        openingWorldRef.current = { ...assistantTurn };
-      }
-
-      setWorldReady(true);
-
-      if (sawEnd) {
-        setEndLabel(label);
-        setEnded(true);
-        setSoftEnded(false);
-        endLabelRef.current = label;
-        endedRef.current = true;
-        softEndedRef.current = false;
-        addEntry("system", label ? `— ${label} —` : "— THE WORLD GOES DARK —");
-      } else if (sawSoftEnd) {
-        setEndLabel(label);
-        setSoftEnded(true);
-        endLabelRef.current = label;
-        softEndedRef.current = true;
-        addEntry(
-          "system",
-          label
-            ? `— ${label} —  //  THE WORLD CONTINUES`
-            : "— A CHAPTER CLOSES —  //  THE WORLD CONTINUES"
+        let cleanRaw = ensureAssistantHasScene(stripControlTokens(rawFull));
+        let canonicalContent = resolveCanonicalAssistantContent(
+          historyRef.current,
+          cleanRaw || cleanScene
         );
-      }
 
-      setBusy(false);
-      focusInput();
-      setTimeout(() => persistSession(), 0);
+        // Dedicated lightweight HP pass — owns damage numbers on harm turns.
+        try {
+          const healthRes = await fetch("/api/health", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              history: historyRef.current.slice(-MAX_HISTORY_MESSAGES),
+              assistantContent: canonicalContent,
+            }),
+          });
+          if (healthRes.ok) {
+            const healthJson = (await healthRes.json()) as {
+              content?: string;
+              result?: {
+                assessed?: boolean;
+                skipped?: boolean;
+                damage?: number;
+                prior_hp?: number;
+                new_hp?: number;
+                died?: boolean;
+                prompt_block?: string | null;
+              };
+            };
+            if (typeof healthJson.content === "string" && healthJson.content) {
+              canonicalContent = healthJson.content;
+            }
+            const hr = healthJson.result;
+            if (hr?.prompt_block) {
+              pendingHealthBlockRef.current = hr.prompt_block;
+            } else {
+              pendingHealthBlockRef.current = null;
+            }
+            if (
+              hr?.assessed &&
+              !hr.skipped &&
+              typeof hr.damage === "number" &&
+              hr.damage > 0 &&
+              myRun === runIdRef.current
+            ) {
+              addEntry(
+                "system",
+                `vitality ${hr.prior_hp ?? "?"} → ${hr.new_hp ?? "?"} (−${hr.damage})`
+              );
+            }
+            if (hr?.died) {
+              sawEnd = true;
+              if (!label) label = "DEAD";
+              const endedParse = parseScene(canonicalContent);
+              if (endedParse.ended) sawEnd = true;
+            }
+          }
+        } catch {
+          // Non-fatal — narrative STATE still stands if tracker fails.
+        }
+
+        if (myRun !== runIdRef.current) return;
+        finished = true;
+
+        const assistantTurn: Turn = {
+          role: "assistant",
+          content: canonicalContent,
+        };
+        historyRef.current.push(assistantTurn);
+
+        if (!openingWorldRef.current) {
+          openingWorldRef.current = { ...assistantTurn };
+        }
+
+        setWorldReady(true);
+
+        if (sawEnd) {
+          setEndLabel(label);
+          setEnded(true);
+          setSoftEnded(false);
+          endLabelRef.current = label;
+          endedRef.current = true;
+          softEndedRef.current = false;
+          addEntry("system", label ? `— ${label} —` : "— THE WORLD GOES DARK —");
+        } else if (sawSoftEnd) {
+          setEndLabel(label);
+          setSoftEnded(true);
+          endLabelRef.current = label;
+          softEndedRef.current = true;
+          addEntry(
+            "system",
+            label
+              ? `— ${label} —  //  THE WORLD CONTINUES`
+              : "— A CHAPTER CLOSES —  //  THE WORLD CONTINUES"
+          );
+        }
+
+        setBusy(false);
+        focusInput();
+        setTimeout(() => persistSession(), 0);
+      })();
     };
 
     const tick = (ts: number) => {
@@ -733,17 +798,22 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       for (let attempt = 0; attempt < 2; attempt++) {
         if (attempt > 0) resetStreamState();
 
+        const healthBlock = pendingHealthBlockRef.current;
+        pendingHealthBlockRef.current = null;
         const res = await fetch("/api/game", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             history: historyRef.current.slice(-MAX_HISTORY_MESSAGES),
             seedCode: seedRef.current,
+            healthBlock,
           }),
         });
 
         if (!res.ok || !res.body) {
           if (myRun !== runIdRef.current) return;
+          // Restore notice so a retry can still inform the model.
+          if (healthBlock) pendingHealthBlockRef.current = healthBlock;
           syncTypingSound(false);
           setSyncing(false);
           const detail = await res.text().catch(() => "");
@@ -845,6 +915,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     historyRef.current = [];
     syncTimingsRef.current = [];
     checkpointsRef.current = [];
+    pendingHealthBlockRef.current = null;
     openingWorldRef.current = null;
     idRef.current = 0;
     seedRef.current = null;
