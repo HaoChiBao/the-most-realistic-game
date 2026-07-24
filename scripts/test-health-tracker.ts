@@ -212,4 +212,63 @@ STATE
   assert.equal(next.player.stats.hp, 90);
 }
 
+// --- miss / ambient false positives ---
+{
+  const miss = heuristicAssessment(
+    "I punch the guard",
+    "The guard dodges cleanly and steps aside."
+  );
+  assert.equal(miss.harmed, false, "missed punch must not invent damage");
+}
+
+{
+  const ambient = shouldAssessHealth(
+    [{ role: "user", content: "I look around" }],
+    "Dried blood stains the floor near the door."
+  );
+  assert.equal(
+    ambient.assess,
+    false,
+    "ambient blood without player hit should not assess"
+  );
+}
+
+{
+  const hit = shouldAssessHealth(
+    [{ role: "user", content: "I step back" }],
+    "The baton strikes you across the ribs. Pain blooms."
+  );
+  assert.equal(hit.assess, true);
+  assert.equal(hit.reason, "scene_harm");
+}
+
+// --- baselineHp prevents double-count with narrative hp drop ---
+{
+  const shell = {
+    player: {
+      stats: { hp: 70, combat: 20 },
+      body: { head: "ok", torso: "bruised" },
+      conscious: true,
+      alive: true,
+      conditions: [],
+    },
+  };
+  const applied = applyHealthDamage(
+    shell,
+    {
+      harmed: true,
+      severity: "moderate",
+      body_part: "torso",
+      injury: "bruised",
+      cause: "baton",
+      unconscious: false,
+      confidence: 0.9,
+    },
+    30,
+    { baselineHp: 100 }
+  );
+  assert.equal(applied.prior_hp, 100);
+  assert.equal(applied.new_hp, 70, "must subtract from baseline, not shell hp");
+}
+
 console.log("test-health-tracker: ok");

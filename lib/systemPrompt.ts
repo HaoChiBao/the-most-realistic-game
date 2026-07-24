@@ -375,6 +375,9 @@ injury turns and writes player.stats.hp (start 100; 0 = dead, alive false).
 When you see [HEALTH — server authoritative], treat those HP numbers as FACT —
 do not heal or invent different hp that turn. Still narrate injuries in [SCENE]
 and keep body{} / conditions[] consistent with the hit.
+On harm turns: OMIT player.stats.hp from your STATE delta (tracker owns it).
+You may still update body{}, conditions[], conscious, and alive when narrating
+injury — the tracker reconciles hp afterward.
 
 When a character is FIRST named in [SCENE], add a full sheet that same turn
 (all persona fields — see NPC REGISTRY). Update EVERY character sheet EVERY

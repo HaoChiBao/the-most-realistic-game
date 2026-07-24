@@ -795,11 +795,13 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     };
 
     try {
+      // Capture once so a scene-retry does not drop the prior-turn health mandate.
+      const healthBlock = pendingHealthBlockRef.current;
+      pendingHealthBlockRef.current = null;
+
       for (let attempt = 0; attempt < 2; attempt++) {
         if (attempt > 0) resetStreamState();
 
-        const healthBlock = pendingHealthBlockRef.current;
-        pendingHealthBlockRef.current = null;
         const res = await fetch("/api/game", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1007,6 +1009,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     const saved = loadSession();
     if (saved && canRestoreSession(saved, seedCode)) {
       historyRef.current = saved.history.map((t) => ({ ...t }));
+      pendingHealthBlockRef.current = null;
       idRef.current = saved.nextEntryId;
       seedRef.current = saved.seedCode;
       // Only mark persisted if this boot is from a shared deep link.
@@ -1216,6 +1219,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     historyRef.current = [];
     syncTimingsRef.current = [];
     checkpointsRef.current = [];
+    pendingHealthBlockRef.current = null;
     setEntries([]);
     setInput("");
     setEnded(false);
@@ -1243,6 +1247,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     const cp = checkpointsRef.current.pop();
     if (!cp) return;
     historyRef.current = cp.history.map((t) => ({ ...t }));
+    pendingHealthBlockRef.current = null;
     setEntries(cp.entries.map((e) => ({ ...e })));
     idRef.current = cp.entries.reduce((m, e) => Math.max(m, e.id), 0);
     setEnded(false);

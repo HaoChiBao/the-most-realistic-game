@@ -67,8 +67,9 @@ export type DamageResult = {
 const ATTACK_RE =
   /\b(tackle|tackling|attack|attacking|punch|punches|punching|box|boxing|hit|hitting|kick|kicking|stab|shoot|shooting|fight|fighting|assault|throw|throwing|swing|bash|beat|slug|smash|strike|wrestle|grapple|choke|headbutt|burn|ignite)\b/i;
 
+/** Player-targeted harm only — ambient "blood on the floor" must not match. */
 const HARM_SCENE_RE =
-  /\b(bleed|bleeding|blood|wound|wounded|bruise|bruised|broke|broken|fracture|shot|gunshot|stab(bed|s|bing)?|punch(ed|es|ing)?|kick(ed|s|ing)?|slam(med|s)?|crack(ed|s)?|gash|cut you|cuts you|strikes? you|hits you|hit you|hurts? you|hurt you|injur(e|ed|y)|unconscious|collapse[sd]?|knocked (out|down)|takedown|pins? you|slams? you|baton|bullet|blade)\b/i;
+  /\b((?:strikes?|hits?|hit|hurts?|wounds?|cuts?|shoots?|shot|stabs?|punche[sd]?|kicks?|slams?|clubs?|bashe[sd]?|grabs?|pins?)\s+you|you\s+(?:are|get|got|were)\s+(?:hit|hurt|shot|stabbed|punched|kicked|slammed|clubbed|bruised|cut|wounded)|your\s+(?:blood|wound|ribs|skull|jaw|shoulder|arm|leg)\b|bleed(?:s|ing)?\s+from\s+your|pain\s+(?:blooms|explodes|shoots|flares)|knocked\s+(?:you\s+)?(?:out|down)|pins?\s+you|slams?\s+you|takedown)\b/i;
 
 /** Base HP loss ranges by severity (inclusive). Midpoint used with light jitter. */
 export const SEVERITY_DAMAGE: Record<
@@ -252,7 +253,14 @@ export function calculateDamage(
 export function applyHealthDamage(
   state: Record<string, unknown>,
   assessment: HarmAssessment,
-  damage: number
+  damage: number,
+  opts?: {
+    /**
+     * HP before this turn's narrative delta. Required so we don't subtract
+     * tracker damage from an HP the story model already reduced.
+     */
+    baselineHp?: number;
+  }
 ): {
   state: Record<string, unknown>;
   prior_hp: number;
@@ -261,7 +269,10 @@ export function applyHealthDamage(
   unconscious: boolean;
 } {
   const player = getPlayerSlice(state);
-  const prior_hp = player.hp;
+  const prior_hp =
+    typeof opts?.baselineHp === "number" && Number.isFinite(opts.baselineHp)
+      ? clamp(Math.round(opts.baselineHp), 0, 100)
+      : player.hp;
   const new_hp = clamp(prior_hp - damage, 0, 100);
   const died = new_hp <= 0;
   const unconscious =
@@ -352,7 +363,14 @@ export function applyHealthDamage(
           : assessment.body_part === "head"
             ? ["think_clearly"]
             : [],
-      death_risk: assessment.severity === "critical" || assessment.severity === "lethal",
+      death_risk:
+        assessment.severity === "lethal"
+          ? "imminent"
+          : assessment.severity === "critical"
+            ? "high"
+            : assessment.severity === "heavy"
+              ? "medium"
+              : "low",
     };
     if (existing >= 0) conds[existing] = record;
     else conds.push(record);
@@ -422,6 +440,19 @@ export function heuristicAssessment(
   const hitYou = HARM_SCENE_RE.test(scene);
   const playerAttack = ATTACK_RE.test(action);
 
+  // Miss / no contact — never invent free damage just because the player swung.
+  if (playerAttack && !hitYou) {
+    return {
+      harmed: false,
+      severity: "none",
+      body_part: null,
+      injury: "ok",
+      cause: "no clear injury to player",
+      unconscious: false,
+      confidence: 0.45,
+    };
+  }
+
   if (!hitYou && !playerAttack) {
     return {
       harmed: false,
@@ -448,6 +479,13 @@ export function heuristicAssessment(
   else if (/\bleft leg|left knee\b/i.test(text)) body_part = "left_leg";
   else if (/\bright leg|right knee\b/i.test(text)) body_part = "right_leg";
 
+  const headKnockout =
+    body_part === "head" &&
+    (severity === "heavy" ||
+      severity === "critical" ||
+      severity === "lethal" ||
+      knock);
+
   return {
     harmed: true,
     severity,
@@ -460,7 +498,7 @@ export function heuristicAssessment(
         : knock
           ? "combat takedown"
           : "altercation injury",
-    unconscious: knock || severity === "lethal" || body_part === "head",
+    unconscious: knock || severity === "lethal" || headKnockout,
     confidence: 0.35,
   };
 }
@@ -565,17 +603,43 @@ function healthPromptBlock(result: DamageResult): string | null {
       ? `Body: ${result.body_part}=${result.injury}.`
       : null,
     result.died
-      ? `DEAD: alive=false, conscious=false. Hard end with <ENDLABEL>DEAD</ENDLABEL><END> if not already ended.`
+      ? `DEAD: alive=false, conscious=false. Hard end already applied — do not contradict.`
       : result.unconscious
         ? `Unconscious: conscious=false. Narrate collapse; player cannot act freely.`
-        : `Keep player.stats.hp exactly ${result.new_hp} in STATE. Do not heal mid-fight.`,
+        : `Keep player.stats.hp exactly ${result.new_hp} in STATE. Do not heal mid-fight. Do not invent a different hp.`,
   ];
   return lines.filter(Boolean).join("\n");
+}
+
+/** Put hard END markers in the visible SCENE section so parseScene sees them. */
+function injectDeathEndIntoScene(raw: string): string {
+  if (/<\s*END\s*>/i.test(raw)) return raw;
+  const worldM = raw.match(/\[\s*WORLD\s*\]/i);
+  if (worldM && worldM.index !== undefined) {
+    const before = raw.slice(0, worldM.index).replace(/\s*$/, "");
+    const after = raw.slice(worldM.index);
+    return `${before}\n<ENDLABEL>DEAD</ENDLABEL><END>\n\n${after}`;
+  }
+  return raw.replace(/\s*$/, "\n<ENDLABEL>DEAD</ENDLABEL><END>");
+}
+
+function lastHistoryState(
+  history: ClientTurn[]
+): Record<string, unknown> | null {
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].role !== "assistant") continue;
+    const s = extractStateJson(history[i].content);
+    if (s && typeof s === "object") return s as Record<string, unknown>;
+  }
+  return null;
 }
 
 /**
  * Run the dedicated health pass against a finished assistant turn.
  * Returns patched assistant content + damage metadata.
+ *
+ * HP math uses the *previous* turn's HP as baseline so narrative STATE
+ * reductions are not double-counted with tracker damage.
  */
 export async function resolveHealthForTurn(input: {
   history: ClientTurn[];
@@ -588,31 +652,32 @@ export async function resolveHealthForTurn(input: {
     extractSceneBlock(input.assistantContent) ??
     input.assistantContent.slice(0, 900);
   const gate = shouldAssessHealth(input.history, scene);
-  let priorState: Record<string, unknown> | null = null;
+
+  // Baseline = last stored turn (current assistant not in history yet).
+  const baselineState = lastHistoryState(input.history);
+
+  // Shell = this turn's merged STATE (keeps body/heat/etc from narrative).
+  let shellState: Record<string, unknown> | null = null;
   const fromAssistant = extractStateJson(input.assistantContent);
   if (fromAssistant && typeof fromAssistant === "object") {
-    priorState = fromAssistant as Record<string, unknown>;
+    shellState = fromAssistant as Record<string, unknown>;
   } else {
-    for (let i = input.history.length - 1; i >= 0; i--) {
-      if (input.history[i].role !== "assistant") continue;
-      const s = extractStateJson(input.history[i].content);
-      if (s && typeof s === "object") {
-        priorState = s as Record<string, unknown>;
-        break;
-      }
-    }
+    shellState = baselineState;
   }
 
-  const player = getPlayerSlice(priorState);
+  const baselinePlayer = getPlayerSlice(baselineState);
+  const shellPlayer = getPlayerSlice(shellState);
+  const baselineHp = baselineState ? baselinePlayer.hp : shellPlayer.hp;
+
   const empty: DamageResult = {
     assessed: false,
     skipped: true,
     skip_reason: gate.reason,
-    prior_hp: player.hp,
+    prior_hp: baselineHp,
     damage: 0,
-    new_hp: player.hp,
-    died: !player.alive || player.hp <= 0,
-    unconscious: !player.conscious,
+    new_hp: baselineHp,
+    died: !baselinePlayer.alive || baselineHp <= 0,
+    unconscious: !baselinePlayer.conscious,
     severity: "none",
     body_part: null,
     injury: "ok",
@@ -625,14 +690,14 @@ export async function resolveHealthForTurn(input: {
     return { content: input.assistantContent, result: empty };
   }
 
-  if (!priorState) {
+  if (!shellState) {
     return {
       content: input.assistantContent,
       result: { ...empty, skip_reason: "no_state" },
     };
   }
 
-  if (!player.alive || player.hp <= 0) {
+  if (!baselinePlayer.alive || baselineHp <= 0) {
     return {
       content: input.assistantContent,
       result: { ...empty, skip_reason: "already_dead", died: true },
@@ -640,31 +705,29 @@ export async function resolveHealthForTurn(input: {
   }
 
   const action = lastUserAction(input.history);
-  const npcCombat = pickHostileCombat(priorState);
+  const npcCombat = pickHostileCombat(shellState ?? baselineState);
   const assessment = await classifyHarmWithLlm({
     action,
     scene,
-    priorHp: player.hp,
-    playerCombat: player.combat,
+    priorHp: baselineHp,
+    playerCombat: baselinePlayer.combat,
     npcCombat,
   });
 
   const damage = calculateDamage(assessment, {
-    playerCombat: player.combat,
+    playerCombat: baselinePlayer.combat,
     npcCombat,
     sceneSeed: scene,
   });
 
-  const applied = applyHealthDamage(priorState, assessment, damage);
+  const applied = applyHealthDamage(shellState, assessment, damage, {
+    baselineHp,
+  });
   const patched = rewriteWorldState(input.assistantContent, applied.state);
 
-  // Force hard END markers into content when HP hits 0.
   let content = patched;
-  if (applied.died && !/<\s*END\s*>/i.test(content)) {
-    content = content.replace(
-      /\s*$/,
-      "\n<ENDLABEL>DEAD</ENDLABEL><END>"
-    );
+  if (applied.died) {
+    content = injectDeathEndIntoScene(content);
   }
 
   const result: DamageResult = {

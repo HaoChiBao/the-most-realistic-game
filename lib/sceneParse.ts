@@ -137,6 +137,7 @@ export function sanitizeSceneMeta(text: string): string {
     .replace(/\[\s*AUTHORITY\s+RESPONSE[\s\S]*?\]/gi, "")
     .replace(/\[\s*LETHAL\s+CONSEQUENCE[\s\S]*?\]/gi, "")
     .replace(/\[\s*DETENTION\s+TIMER[\s\S]*?\]/gi, "")
+    .replace(/\[\s*HEALTH[\s\S]*?\]/gi, "")
     .replace(/\[\s*RANDOMNESS[\s\S]*?\]/gi, "")
     .replace(/\[SCENE\s+continues[^\]]*\]/gi, "")
     .replace(/\n{3,}/g, "\n\n")
