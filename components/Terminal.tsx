@@ -105,6 +105,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const [softEnded, setSoftEnded] = useState(false);
   const [endLabel, setEndLabel] = useState<string | null>(null);
   const [worldReady, setWorldReady] = useState(false);
+  const [seedLoadFailed, setSeedLoadFailed] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugTick, setDebugTick] = useState(0);
@@ -842,10 +843,29 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     }
   }, [addEntry, scrollToBottom, setEntryText, focusInput, persistSession]);
 
+  const failSeedLoad = useCallback(
+    (code: string, message: string) => {
+      seedRef.current = code;
+      seedSavedRef.current = false;
+      setSeedLoadFailed(true);
+      addEntry("error", message);
+      addEntry(
+        "system",
+        "Shared seed could not be restored. Retry the seed or start a new world."
+      );
+      setBusy(false);
+      setWorldLoading(false);
+      setLoadingPhase("done");
+      setBooted(true);
+    },
+    [addEntry]
+  );
+
   const loadSeed = useCallback(
     async (code: string) => {
       const myRun = runIdRef.current;
       setBusy(true);
+      setSeedLoadFailed(false);
       setWorldLoading(true);
       setLoadingPhase("loading-seed");
       setLoadingSeedCode(code);
@@ -854,13 +874,13 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.opening || !data.world) {
           if (myRun !== runIdRef.current) return;
-          addEntry(
-            "error",
-            data.error || `NO WORLD FOUND FOR SEED ${code}. Generating a new one.`
-          );
-          setBusy(false);
-          setWorldLoading(false);
-          await streamTurn();
+          const detail =
+            typeof data.error === "string" && data.error.trim()
+              ? data.error.trim()
+              : res.status === 404
+                ? `No world with seed ${code}.`
+                : `Could not load seed ${code}.`;
+          failSeedLoad(code, detail.toUpperCase());
           return;
         }
         if (myRun !== runIdRef.current) return;
@@ -869,6 +889,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         historyRef.current.push(turn);
         openingWorldRef.current = { ...turn };
         seedRef.current = code;
+        seedSavedRef.current = true;
+        setSeedLoadFailed(false);
         addEntry("system", `SEED ${code} LOADED.`);
         setLoadingPhase("revealing");
         await revealText(String(data.opening).trim());
@@ -884,13 +906,10 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         persistSession();
       } catch (err) {
         if (myRun !== runIdRef.current) return;
-        addEntry("error", `COULD NOT LOAD SEED. ${String(err)}`);
-        setBusy(false);
-        setWorldLoading(false);
-        await streamTurn();
+        failSeedLoad(code, `COULD NOT LOAD SEED. ${String(err)}`);
       }
     },
-    [addEntry, revealText, streamTurn, focusInput, persistSession]
+    [addEntry, revealText, focusInput, persistSession, failSeedLoad]
   );
 
   const resetForNewWorld = useCallback(() => {
@@ -923,6 +942,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     setSoftEnded(false);
     setEndLabel(null);
     setWorldReady(false);
+    setSeedLoadFailed(false);
     setSharing(false);
     setDebugOpen(false);
     setWorldLoading(true);
@@ -982,7 +1002,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     setBooted(true);
     if (seedCode) {
       seedRef.current = seedCode;
-      seedSavedRef.current = true;
+      seedSavedRef.current = false;
       setLoadingSeedCode(seedCode);
       await loadSeed(seedCode);
     } else {
@@ -1202,7 +1222,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
 
   const retryWorld = useCallback(() => {
     if (busy) return;
-    const code = seedRef.current;
+    const code = seedRef.current ?? seedCode ?? null;
     if (code) {
       window.location.assign(`/s/${code}`);
       return;
@@ -1235,7 +1255,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       focusInput();
       persistSession();
     });
-  }, [busy, newWorld, revealText, focusInput, persistSession]);
+  }, [busy, newWorld, revealText, focusInput, persistSession, seedCode]);
 
   const rewind = useCallback(() => {
     if (busy) return;
@@ -1304,7 +1324,19 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
           ))}
         </div>
 
-        {ended ? (
+        {seedLoadFailed ? (
+          <div className="prompt end-prompt">
+            <span className="sigil">::</span>
+            <span className="end-actions">
+              <button className="restart" onClick={retryWorld} disabled={busy}>
+                [ retry seed ]
+              </button>
+              <button className="restart" onClick={newWorld}>
+                [ new world ]
+              </button>
+            </span>
+          </div>
+        ) : ended ? (
           <div className="prompt end-prompt">
             <span className="sigil">::</span>
             <span className="end-actions">

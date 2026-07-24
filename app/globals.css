@@ -356,6 +356,13 @@ a.restart {
 .world-setting {
   font-size: clamp(15px, 2vmin, 19px);
   line-height: 1.35;
+  margin-bottom: 8px;
+}
+
+.world-opening {
+  font-size: clamp(11px, 1.5vmin, 13px);
+  line-height: 1.4;
+  color: var(--phosphor-dim);
   margin-bottom: 12px;
 }
 
