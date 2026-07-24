@@ -1,5 +1,37 @@
 [
   {
+    "id": "2026-07-24-world-loading-gate",
+    "version": "0.7.2",
+    "engine": "v6.0",
+    "date": "2026-07-24",
+    "significance": 82,
+    "title": "World loading screen waits for hydration",
+    "summary": "Fresh worlds show a CRT loading overlay through Phase A and Phase B. The terminal stays gated until hydration finishes — not just until the opening scene types out.",
+    "tags": ["ux", "opening", "loading"],
+    "changes": [
+      "Minecraft-style loading overlay: progress, seed, status phases, tips",
+      "Phases: boot → generating → revealing → hydrating → enter",
+      "Overlay dismisses only after Phase B hydration settles",
+      "Session restore skips the overlay; shared seeds use restore-flavored copy"
+    ]
+  },
+  {
+    "id": "2026-07-24-vitals-debug-commands",
+    "version": "0.7.1",
+    "engine": "v6.0",
+    "date": "2026-07-24",
+    "significance": 70,
+    "title": "Debug commands for character vitals",
+    "summary": "Inspect hp, stamina, pain, body parts, and skills with readable slash commands — player by default, or filter an NPC by name/id.",
+    "tags": ["debug", "devtools", "ux"],
+    "changes": [
+      "/health (aliases: /hp /vitals /body /me) — readable vitals sheet",
+      "/health <npc> — same sheet for a matching character",
+      "/player and /traits now lead with the vitals view before JSON",
+      "/npcs roster lines include hp · stamina · combat when present"
+    ]
+  },
+  {
     "id": "2026-07-12-two-phase-opening",
     "version": "0.7.0",
     "engine": "v6.0",

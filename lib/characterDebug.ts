@@ -205,8 +205,171 @@ export function extractCharactersFromState(state: unknown): CharacterBundle | nu
   };
 }
 
+const CORE_STAT_KEYS = ["hp", "stamina", "pain"] as const;
+const SKILL_STAT_KEYS = [
+  "combat",
+  "firearms",
+  "awareness",
+  "composure",
+  "mobility",
+] as const;
+const BODY_PART_ORDER = [
+  "head",
+  "torso",
+  "left_arm",
+  "right_arm",
+  "left_leg",
+  "right_leg",
+] as const;
+
+export type VitalsSource = {
+  label: string;
+  body?: Record<string, string>;
+  stats?: Record<string, number>;
+  conscious?: boolean;
+  alive?: boolean;
+  status?: string;
+  conditions?: unknown[];
+  traits?: string[];
+  abilities?: string[];
+};
+
+function numStats(stats?: Record<string, number>): Record<string, number> {
+  if (!stats) return {};
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(stats)) {
+    if (typeof v === "number" && Number.isFinite(v)) out[k] = v;
+  }
+  return out;
+}
+
+/** Readable hp / body / skills dump for /health and /traits. */
+export function formatVitalsOverview(source: VitalsSource): string {
+  const stats = numStats(source.stats);
+  const body = source.body ?? {};
+  const lines: string[] = [`VITALS — ${source.label}`, ""];
+
+  const flags: string[] = [];
+  if (source.alive === false) flags.push("DEAD");
+  else if (source.alive === true) flags.push("alive");
+  if (source.conscious === false) flags.push("UNCONSCIOUS");
+  else if (source.conscious === true) flags.push("conscious");
+  if (source.status && source.status !== "ok") {
+    flags.push(`status: ${source.status}`);
+  }
+  if (flags.length) {
+    lines.push(flags.join("  |  "), "");
+  }
+
+  lines.push("— vitals —");
+  let hasCore = false;
+  for (const key of CORE_STAT_KEYS) {
+    if (stats[key] != null) {
+      lines.push(`  ${key.padEnd(10)} ${stats[key]}`);
+      hasCore = true;
+    }
+  }
+  if (!hasCore) lines.push("  (no hp/stamina/pain in STATE)");
+
+  lines.push("", "— skills —");
+  let hasSkills = false;
+  for (const key of SKILL_STAT_KEYS) {
+    if (stats[key] != null) {
+      lines.push(`  ${key.padEnd(10)} ${stats[key]}`);
+      hasSkills = true;
+    }
+  }
+  const known = new Set<string>([...CORE_STAT_KEYS, ...SKILL_STAT_KEYS]);
+  const extras = Object.entries(stats).filter(([k]) => !known.has(k));
+  for (const [k, v] of extras) {
+    lines.push(`  ${k.padEnd(10)} ${v}`);
+    hasSkills = true;
+  }
+  if (!hasSkills) lines.push("  (no skill stats in STATE)");
+
+  lines.push("", "— body —");
+  const seen = new Set<string>();
+  for (const part of BODY_PART_ORDER) {
+    if (body[part] != null) {
+      lines.push(`  ${part.padEnd(12)} ${body[part]}`);
+      seen.add(part);
+    }
+  }
+  for (const [part, status] of Object.entries(body)) {
+    if (seen.has(part)) continue;
+    lines.push(`  ${part.padEnd(12)} ${status}`);
+    seen.add(part);
+  }
+  if (seen.size === 0) lines.push("  (no body map in STATE)");
+
+  if (source.conditions && source.conditions.length > 0) {
+    lines.push("", "— conditions —", fmt(source.conditions));
+  } else {
+    lines.push("", "— conditions —", "  (none)");
+  }
+
+  if (source.traits && source.traits.length > 0) {
+    lines.push("", "— traits —", `  ${source.traits.join(", ")}`);
+  }
+  if (source.abilities && source.abilities.length > 0) {
+    lines.push("", "— abilities —", `  ${source.abilities.join(", ")}`);
+  }
+
+  return lines.join("\n");
+}
+
+export function vitalsFromPlayer(
+  player: Record<string, unknown> | null | undefined
+): VitalsSource | null {
+  if (!player || typeof player !== "object") return null;
+  return {
+    label: "PLAYER",
+    body:
+      player.body && typeof player.body === "object"
+        ? (player.body as Record<string, string>)
+        : undefined,
+    stats:
+      player.stats && typeof player.stats === "object"
+        ? (player.stats as Record<string, number>)
+        : undefined,
+    conscious:
+      typeof player.conscious === "boolean" ? player.conscious : undefined,
+    alive: typeof player.alive === "boolean" ? player.alive : undefined,
+    status: player.status != null ? String(player.status) : undefined,
+    conditions: Array.isArray(player.conditions) ? player.conditions : undefined,
+    traits: Array.isArray(player.traits) ? player.traits.map(String) : undefined,
+    abilities: Array.isArray(player.abilities)
+      ? player.abilities.map(String)
+      : undefined,
+  };
+}
+
+export function vitalsFromCharacter(c: CharacterSheet): VitalsSource {
+  return {
+    label: c.name ? `${c.name} (${c.id})` : c.id,
+    body: c.body,
+    stats: c.stats,
+    conscious: c.conscious,
+    alive: c.alive,
+    status: c.status,
+    conditions: c.conditions,
+    traits: c.traits,
+    abilities: c.abilities,
+  };
+}
+
 function summarizeCharacter(c: CharacterSheet, i: number): string {
   const label = c.name ? `${c.name} (${c.id})` : c.id;
+  const stats = numStats(c.stats);
+  const vitalsBits = [
+    stats.hp != null ? `hp ${stats.hp}` : null,
+    stats.stamina != null ? `stam ${stats.stamina}` : null,
+    stats.pain != null && stats.pain > 0 ? `pain ${stats.pain}` : null,
+    stats.combat != null ? `combat ${stats.combat}` : null,
+  ].filter(Boolean);
+  const injured = c.body
+    ? Object.entries(c.body).filter(([, v]) => v && v !== "ok")
+    : [];
   const parts = [
     `  • ${label}`,
     c.role ? `role: ${c.role}` : null,
@@ -214,6 +377,10 @@ function summarizeCharacter(c: CharacterSheet, i: number): string {
     c.location ? `loc: ${c.location}` : null,
     c.disposition ? `disposition: ${c.disposition}` : null,
     c.trust_to_player != null ? `trust: ${c.trust_to_player}` : null,
+    vitalsBits.length ? vitalsBits.join(" · ") : null,
+    injured.length
+      ? `injuries: ${injured.map(([k, v]) => `${k}=${v}`).join(", ")}`
+      : null,
     c.violence ? `violence: ${c.violence}` : null,
     c.combat_posture ? `posture: ${c.combat_posture}` : null,
     c.training ? `training: ${c.training}` : null,

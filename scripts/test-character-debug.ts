@@ -62,6 +62,8 @@ const overview = formatCharactersOverview(bundle);
 assert(overview.includes("Marcus"), "overview names guard");
 assert(overview.includes("restraining_player"), "overview shows posture");
 assert(overview.includes("pinned player"), "overview shows memory");
+assert(overview.includes("hp 70"), "overview shows hp");
+assert(overview.includes("combat 55"), "overview shows combat");
 
 const sections = buildDebugSections({
   history: [{ role: "assistant", content: raw }],

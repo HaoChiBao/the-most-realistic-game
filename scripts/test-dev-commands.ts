@@ -50,6 +50,7 @@ const unknown = executeDevCommand("/foobar", {
 assert(unknown.lines.join("\n").includes("UNKNOWN"), "unknown cmd");
 
 assert(list.lines.join("\n").includes("/next"), "list includes next");
+assert(list.lines.join("\n").includes("/health"), "list includes health");
 assert(
   executeDevCommand("/consequences", {
     history: [],
@@ -64,5 +65,88 @@ assert(
     .includes("NOT READY"),
   "consequences maps to next inject"
 );
+
+const vitalsState = {
+  player_location: "locker_room",
+  player: {
+    id: "player",
+    alive: true,
+    conscious: true,
+    body: {
+      head: "ok",
+      torso: "bruised",
+      left_arm: "ok",
+      right_arm: "ok",
+      left_leg: "ok",
+      right_leg: "ok",
+    },
+    stats: {
+      hp: 72,
+      stamina: 55,
+      pain: 18,
+      combat: 22,
+      firearms: 10,
+      awareness: 40,
+      composure: 45,
+      mobility: 90,
+    },
+    conditions: [],
+    traits: [],
+    abilities: [],
+  },
+  characters: [
+    {
+      id: "guard_1",
+      name: "Marcus",
+      role: "security guard",
+      alive: true,
+      conscious: true,
+      body: {
+        head: "ok",
+        torso: "ok",
+        left_arm: "ok",
+        right_arm: "ok",
+        left_leg: "ok",
+        right_leg: "ok",
+      },
+      stats: { hp: 80, stamina: 70, pain: 0, combat: 55 },
+    },
+  ],
+};
+
+const vitalsHistory = [
+  {
+    role: "assistant" as const,
+    content: `[SCENE]
+YOU WAKE UP IN A LOCKER ROOM.
+
+[WORLD]
+STATE
+${JSON.stringify(vitalsState, null, 2)}
+`,
+  },
+];
+
+const healthCtx = {
+  history: vitalsHistory,
+  seedCode: "12345678901234",
+  syncTimings: [],
+  worldReady: true,
+  ended: false,
+  softEnded: false,
+  endLabel: null,
+};
+
+const health = executeDevCommand("/health", healthCtx);
+assert(health.lines.join("\n").includes("hp"), "health shows hp");
+assert(health.lines.join("\n").includes("72"), "health shows player hp value");
+assert(health.lines.join("\n").includes("torso"), "health shows body part");
+
+const npcHealth = executeDevCommand("/health marcus", healthCtx);
+assert(npcHealth.lines.join("\n").includes("Marcus"), "npc health by name");
+assert(npcHealth.lines.join("\n").includes("80"), "npc health shows hp");
+
+const traits = executeDevCommand("/traits", healthCtx);
+assert(traits.lines.join("\n").includes("VITALS"), "traits leads with vitals");
 
 console.log("devCommands tests passed");
