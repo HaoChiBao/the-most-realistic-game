@@ -127,15 +127,15 @@ function parseRelationship(raw: unknown): CharacterRelationship | undefined {
     o.long_term && typeof o.long_term === "object" && !Array.isArray(o.long_term)
       ? (o.long_term as Record<string, unknown>)
       : null;
-  const log = Array.isArray(o.log)
+  const log: RelationshipLogEntry[] | undefined = Array.isArray(o.log)
     ? o.log
         .filter((m): m is Record<string, unknown> => !!m && typeof m === "object")
-        .map((m) => {
+        .map((m): RelationshipLogEntry => {
           const scopeRaw = m.scope != null ? String(m.scope) : "both";
-          const scope =
+          const scope: RelationshipLogEntry["scope"] =
             scopeRaw === "short" || scopeRaw === "long" || scopeRaw === "both"
               ? scopeRaw
-              : ("both" as const);
+              : "both";
           return {
             turn: typeof m.turn === "number" ? m.turn : 0,
             event: String(m.event ?? ""),
