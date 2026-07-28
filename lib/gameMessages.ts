@@ -106,6 +106,7 @@ const STORY_KEY_MARKERS = [
   '"threads"',
   "ambient_hooks",
   "timeline",
+  "chronicle",
   "end_clauses",
   "active_track",
 ] as const;

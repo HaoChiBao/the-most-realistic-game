@@ -14,6 +14,7 @@ const KEYED_ARRAY_KEYS = [
 const APPEND_ARRAY_KEYS = [
   "random_log",
   "timeline",
+  "chronicle",
   "ambient_hooks",
   "noticed_before",
 ] as const;

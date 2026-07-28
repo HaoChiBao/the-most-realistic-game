@@ -26,6 +26,7 @@ import {
 } from "@/lib/save";
 import { MAX_HISTORY_MESSAGES } from "@/lib/gameMessages";
 import DebugPanel from "@/components/DebugPanel";
+import TimelinePanel from "@/components/TimelinePanel";
 import WorldLoadingScreen, {
   type WorldLoadingPhase,
 } from "@/components/WorldLoadingScreen";
@@ -109,6 +110,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const [sharing, setSharing] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugTick, setDebugTick] = useState(0);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [timelineTick, setTimelineTick] = useState(0);
   const [worldLoading, setWorldLoading] = useState(() => {
     if (typeof window === "undefined") return true;
     const saved = loadSession();
@@ -945,6 +948,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     setSeedLoadFailed(false);
     setSharing(false);
     setDebugOpen(false);
+    setTimelineOpen(false);
     setWorldLoading(true);
     setLoadingPhase("boot");
     setLoadingSeedCode(null);
@@ -1426,6 +1430,19 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
             >
               {sharing ? "saving..." : "share world"}
             </button>
+            <button
+              className="restart"
+              onClick={(e) => {
+                e.stopPropagation();
+                setTimelineTick((n) => n + 1);
+                setTimelineOpen(true);
+              }}
+              disabled={!worldReady}
+              style={{ marginLeft: 12 }}
+              type="button"
+            >
+              timeline
+            </button>
             <a className="restart" href="/patch-notes" style={{ marginLeft: 12 }}>
               patch notes
             </a>
@@ -1479,6 +1496,13 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
           worldHydrating,
           syncTimings: syncTimingsRef.current,
         }}
+      />
+
+      <TimelinePanel
+        key={timelineTick}
+        open={timelineOpen}
+        onClose={() => setTimelineOpen(false)}
+        history={historyRef.current.map((t) => ({ ...t }))}
       />
     </div>
   );
