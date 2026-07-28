@@ -125,4 +125,68 @@ const playerCond = (
 )[0];
 assert.equal(playerCond.severity, 6);
 
+// Relationship object merges; log appends like memory[].
+const withRel = mergeDeltaState(
+  {
+    ...full,
+    characters: [
+      {
+        id: "mills",
+        name: "Mills",
+        disposition: "neutral",
+        relationship: {
+          bond: "stranger",
+          short_term: { vibe: "just met", updated_turn: 1 },
+          long_term: {
+            summary: "strangers",
+            tags: ["first_sight"],
+            trust_trend: "stable",
+            updated_turn: 1,
+          },
+          log: [
+            { turn: 1, kind: "meet", event: "first sight", scope: "both" },
+          ],
+        },
+      },
+    ],
+  },
+  {
+    characters: [
+      {
+        id: "mills",
+        disposition: "cautious",
+        relationship: {
+          bond: "acquaintance",
+          short_term: { vibe: "wary but talking", stance: "guarded", updated_turn: 2 },
+          long_term: {
+            summary: "spoke once; still cautious",
+            tags: ["talked"],
+            trust_trend: "rising",
+            updated_turn: 2,
+          },
+          log: [
+            { turn: 2, kind: "talk", event: "player asked about exits", scope: "short" },
+          ],
+        },
+      },
+    ],
+  }
+);
+const millsRel = (withRel.characters as Record<string, unknown>[]).find(
+  (c) => c.id === "mills"
+)!;
+const rel = millsRel.relationship as Record<string, unknown>;
+assert.equal(rel.bond, "acquaintance");
+assert.equal(
+  (rel.short_term as { vibe: string }).vibe,
+  "wary but talking"
+);
+assert.equal(
+  (rel.long_term as { summary: string }).summary,
+  "spoke once; still cautious"
+);
+const tags = (rel.long_term as { tags: string[] }).tags;
+assert.ok(tags.includes("first_sight") && tags.includes("talked"), "tags merge");
+assert.equal((rel.log as unknown[]).length, 2, "relationship log appends");
+
 console.log("stateMerge tests passed");

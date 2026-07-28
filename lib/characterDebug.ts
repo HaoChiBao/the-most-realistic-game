@@ -11,6 +11,29 @@ export type CharacterMemory = {
   emotional_weight?: string;
 };
 
+export type RelationshipLogEntry = {
+  turn: number;
+  event: string;
+  scope: "short" | "long" | "both";
+  kind?: string;
+};
+
+export type CharacterRelationship = {
+  bond?: string;
+  short_term?: {
+    vibe?: string;
+    stance?: string;
+    updated_turn?: number;
+  };
+  long_term?: {
+    summary?: string;
+    tags?: string[];
+    trust_trend?: string;
+    updated_turn?: number;
+  };
+  log?: RelationshipLogEntry[];
+};
+
 export type CharacterSheet = {
   id: string;
   name?: string;
@@ -28,6 +51,7 @@ export type CharacterSheet = {
   trust_to_player?: number;
   disposition?: string;
   relationship_to_player?: string;
+  relationship?: CharacterRelationship;
   memory?: CharacterMemory[];
   introduced_turn?: number;
   last_seen_turn?: number;
@@ -71,6 +95,11 @@ export const CHARACTER_STATE_KEYS = [
     prompt: "NPC REGISTRY — memory[] on each character",
   },
   {
+    key: "relationship",
+    role: "Short-term vibe + long-term bond/tags/log with the player",
+    prompt: "RELATIONSHIP TRACKING in system prompt",
+  },
+  {
     key: "disposition",
     role: "Current stance toward player (hostile → allied)",
     prompt: "NPC COMBAT & SELF-DEFENSE + disposition updates",
@@ -86,6 +115,68 @@ export const CHARACTER_STATE_KEYS = [
     prompt: "NPC COMBAT & SELF-DEFENSE + MULTI-OPPONENT COMBAT",
   },
 ] as const;
+
+function parseRelationship(raw: unknown): CharacterRelationship | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const o = raw as Record<string, unknown>;
+  const shortRaw =
+    o.short_term && typeof o.short_term === "object" && !Array.isArray(o.short_term)
+      ? (o.short_term as Record<string, unknown>)
+      : null;
+  const longRaw =
+    o.long_term && typeof o.long_term === "object" && !Array.isArray(o.long_term)
+      ? (o.long_term as Record<string, unknown>)
+      : null;
+  const log = Array.isArray(o.log)
+    ? o.log
+        .filter((m): m is Record<string, unknown> => !!m && typeof m === "object")
+        .map((m) => {
+          const scopeRaw = m.scope != null ? String(m.scope) : "both";
+          const scope =
+            scopeRaw === "short" || scopeRaw === "long" || scopeRaw === "both"
+              ? scopeRaw
+              : ("both" as const);
+          return {
+            turn: typeof m.turn === "number" ? m.turn : 0,
+            event: String(m.event ?? ""),
+            scope,
+            kind: m.kind != null ? String(m.kind) : undefined,
+          };
+        })
+    : undefined;
+
+  return {
+    bond: o.bond != null ? String(o.bond) : undefined,
+    short_term: shortRaw
+      ? {
+          vibe: shortRaw.vibe != null ? String(shortRaw.vibe) : undefined,
+          stance: shortRaw.stance != null ? String(shortRaw.stance) : undefined,
+          updated_turn:
+            typeof shortRaw.updated_turn === "number"
+              ? shortRaw.updated_turn
+              : undefined,
+        }
+      : undefined,
+    long_term: longRaw
+      ? {
+          summary:
+            longRaw.summary != null ? String(longRaw.summary) : undefined,
+          tags: Array.isArray(longRaw.tags)
+            ? longRaw.tags.map(String)
+            : undefined,
+          trust_trend:
+            longRaw.trust_trend != null
+              ? String(longRaw.trust_trend)
+              : undefined,
+          updated_turn:
+            typeof longRaw.updated_turn === "number"
+              ? longRaw.updated_turn
+              : undefined,
+        }
+      : undefined,
+    log,
+  };
+}
 
 function asSheet(raw: unknown): CharacterSheet | null {
   if (!raw || typeof raw !== "object") return null;
@@ -124,6 +215,7 @@ function asSheet(raw: unknown): CharacterSheet | null {
       o.relationship_to_player != null
         ? String(o.relationship_to_player)
         : undefined,
+    relationship: parseRelationship(o.relationship),
     memory: Array.isArray(o.memory)
       ? o.memory
           .filter((m): m is Record<string, unknown> => !!m && typeof m === "object")
@@ -377,6 +469,15 @@ function summarizeCharacter(c: CharacterSheet, i: number): string {
     c.location ? `loc: ${c.location}` : null,
     c.disposition ? `disposition: ${c.disposition}` : null,
     c.trust_to_player != null ? `trust: ${c.trust_to_player}` : null,
+    c.relationship?.bond ? `bond: ${c.relationship.bond}` : null,
+    c.relationship?.short_term?.vibe
+      ? `short: ${c.relationship.short_term.vibe}`
+      : null,
+    c.relationship?.long_term?.summary
+      ? `long: ${c.relationship.long_term.summary}`
+      : c.relationship_to_player
+        ? `rel: ${c.relationship_to_player}`
+        : null,
     vitalsBits.length ? vitalsBits.join(" · ") : null,
     injured.length
       ? `injuries: ${injured.map(([k, v]) => `${k}=${v}`).join(", ")}`
@@ -449,6 +550,45 @@ export function formatCharactersOverview(
     }
   }
 
+  const withRel = bundle.characters.filter(
+    (c) =>
+      c.relationship &&
+      (c.relationship.bond ||
+        c.relationship.short_term?.vibe ||
+        c.relationship.long_term?.summary ||
+        (c.relationship.log?.length ?? 0) > 0)
+  );
+  if (withRel.length > 0) {
+    lines.push("", "— relationships (per NPC) —");
+    for (const c of withRel) {
+      const r = c.relationship!;
+      lines.push(`  ${c.name ?? c.id}:`);
+      if (r.bond) lines.push(`    bond: ${r.bond}`);
+      if (r.short_term?.vibe || r.short_term?.stance) {
+        lines.push(
+          `    short: ${[r.short_term.vibe, r.short_term.stance]
+            .filter(Boolean)
+            .join(" · ")}`
+        );
+      }
+      if (r.long_term?.summary) {
+        lines.push(
+          `    long: ${r.long_term.summary}${
+            r.long_term.trust_trend ? ` (${r.long_term.trust_trend})` : ""
+          }`
+        );
+      }
+      if (r.long_term?.tags?.length) {
+        lines.push(`    tags: ${r.long_term.tags.join(", ")}`);
+      }
+      for (const entry of (r.log ?? []).slice(-3)) {
+        lines.push(
+          `    log t${entry.turn}${entry.kind ? ` [${entry.kind}]` : ""} (${entry.scope}): ${entry.event}`
+        );
+      }
+    }
+  }
+
   return lines.join("\n");
 }
 
@@ -474,6 +614,12 @@ export function formatCharacterStorageGuide(): string {
     "STATE KEYS",
     ...keyLines,
     "",
+    "RELATIONSHIPS",
+    "  • relationship.short_term = this encounter vibe/stance",
+    "  • relationship.long_term = enduring summary + tags + trust_trend",
+    "  • relationship.log[] appends on every meaningful interaction",
+    "  • disposition + trust_to_player stay aligned with bond / recent log",
+    "",
     "PLAYER VISIBILITY",
     "  • [SCENE] shows only what the character perceives — not full sheets",
     "  • Stats and hidden motives stay in STATE until earned by action",
@@ -485,7 +631,11 @@ export function extractCharacterPromptExcerpts(systemPrompt: string): string {
   const markers: [string, RegExp][] = [
     [
       "NPC REGISTRY & PERSONAS",
-      /NPC REGISTRY & PERSONAS[\s\S]*?CHARACTER CONSISTENCY[\s\S]*?Contradiction → fix STATE first, then write \[SCENE\]\. Append memory on conflicts\./,
+      /NPC REGISTRY & PERSONAS[\s\S]*?CHARACTER CONSISTENCY[\s\S]*?Tone toward the player MUST match relationship\.short_term and long_term\./,
+    ],
+    [
+      "RELATIONSHIP TRACKING",
+      /RELATIONSHIP TRACKING[\s\S]*?enemy\/rival → hostile \+ low trust; close\/familiar → friendly\/allied \+ higher\)\./,
     ],
     [
       "NPC COMBAT & SELF-DEFENSE",

@@ -94,6 +94,8 @@ DELTA rules (turn 2+):
 - player: only changed subfields (stats, body parts, inventory, conditions).
 - characters[]: ONLY NPCs who appear or change this turn — patch by id; new NPCs
   get a full minimal sheet; returning NPCs get only changed fields + id.
+  On interaction: include relationship patches (short_term and/or long_term) and
+  ONLY NEW relationship.log[] entries (append style, like memory[]).
 - locations[]: only new locations or changed exits/tags.
 - heat, active_track, starting_plot: only if changed.
 - threads[], laws[], consequences[]: only entries new or changed this turn.
@@ -152,7 +154,24 @@ FULL STATE SCHEMA (turn 1 only — reference for opening)
       },
       "trust_to_player": 0,
       "disposition": "hostile|cautious|neutral|friendly|allied",
-      "relationship_to_player": "one line: how they currently relate",
+      "relationship_to_player": "mirror of relationship.long_term.summary",
+      "relationship": {
+        "bond": "stranger|acquaintance|familiar|close|rival|enemy",
+        "short_term": {
+          "vibe": "how they feel about the player RIGHT NOW this encounter",
+          "stance": "immediate attitude e.g. wary, warm, furious, grateful",
+          "updated_turn": 1
+        },
+        "long_term": {
+          "summary": "enduring dynamic in one line",
+          "tags": ["helped_once", "lied_to"],
+          "trust_trend": "rising|falling|stable",
+          "updated_turn": 1
+        },
+        "log": [
+          {"turn": 1, "kind": "meet|talk|help|harm|favor|betray|gift|threat|other", "event": "short beat", "scope": "short|long|both"}
+        ]
+      },
       "memory": [{"turn": 1, "event": "what happened", "emotional_weight": "low|medium|high"}],
       "introduced_turn": 1,
       "last_seen_turn": 1,
@@ -232,7 +251,7 @@ CONSISTENCY AUDIT (every turn)
 
 Before finishing [SCENE]: it must not contradict known laws, inventory, body,
 active conditions/gates, location exits, declared abilities, or ANY field on
-characters[] (appearance, role, memory, disposition, combat_posture, status).
+characters[] (appearance, role, memory, disposition, relationship, combat_posture, status).
 If the player breaks a known law or attacks an NPC, show the cost — do not
 soft-pedal to protect the story. NPC sheets are canonical — [SCENE] cannot
 rename, relocate, or retcon them without a STATE update the same turn.
@@ -257,9 +276,13 @@ WHEN TO ADD
 
 SHEET LIFECYCLE
 - First mention → full sheet with introduced_turn = clock.turn (in delta if turn 2+).
+  Seed relationship: bond stranger, short_term vibe "just met", long_term summary
+  "strangers", log entry kind meet.
 - Every turn: patch only changed fields on affected NPCs in delta STATE.
 - Every turn: update location, disposition, trust_to_player, combat_posture,
   status, body, stats, conditions, last_seen_turn if present in SCENE.
+- ANY interaction with the player (talk, help, harm, gift, threat, favor, ask,
+  refuse) → update relationship (see RELATIONSHIP TRACKING) AND append memory[].
 - Significant interaction → append memory[] {turn, event, emotional_weight}.
   Player asks "what does he look like" / "who is she" → answer from sheet;
   add detail to appearance/personality/backstory_hints if newly revealed — NEVER
@@ -271,7 +294,43 @@ PERSONA FIELDS (use them)
 - personality[], speech_style, wants, fears drive how they act and speak.
 - archetype + training + authority_level set realistic power balance.
 - disposition + trust_to_player shift from player actions (attack → hostile fast).
-- relationship_to_player: one-line living summary updated each interaction.
+- relationship is AUTHORITATIVE social memory — short_term + long_term + log.
+  relationship_to_player mirrors long_term.summary (compat).
+
+RELATIONSHIP TRACKING (required — short term + long term)
+
+characters[].relationship is how the world remembers YOU with each person.
+Update it whenever the player interacts with that NPC. Reference it BEFORE
+writing [SCENE] dialogue, favors, hostility, or recognition.
+
+STRUCTURE
+- bond: overall tier — stranger → acquaintance → familiar → close | rival | enemy
+- short_term: THIS encounter / recent minutes — vibe + stance + updated_turn.
+  Resets or soft-shifts when a new encounter starts after time/distance gap.
+- long_term: enduring dynamic — summary + compact tags[] + trust_trend + updated_turn.
+  Survives across encounters. Tags are short tokens (helped_escape, stole_from,
+  shared_secret, assaulted, paid_debt). Cap tags at ~8; drop oldest if needed.
+- log[]: append-only interaction beats {turn, kind, event, scope}.
+  scope short = mood only; long = lasting change; both = update both layers.
+  Delta turns: emit ONLY new log entries. Cap retained log ~12 (drop oldest).
+
+WHEN TO UPDATE
+- First meeting → bond stranger, log kind meet, scope both.
+- Talk / ask / banter → short_term; log kind talk (scope short unless confession).
+- Help, gift, favor, apology → short_term warmer; may raise trust, long_term tags,
+  bond toward acquaintance/familiar/close; log scope both when lasting.
+- Harm, threat, lie caught, steal → short_term colder; trust drop; tags; bond may
+  flip to rival/enemy; disposition/trust_to_player must match; log scope both.
+- Time passes / re-meet after gap → refresh short_term from long_term (they
+  remember the long_term; short_term is "picking up where we left off").
+
+REFERENCE RULES (non-negotiable)
+- Before NPC speaks or acts toward player: read relationship.short_term +
+  long_term.summary + last 2–3 log events. Tone MUST match.
+- Do NOT reset to stranger if log/long_term already exists.
+- Do NOT invent prior history absent from relationship / memory.
+- Keep disposition + trust_to_player aligned with bond and recent log
+  (enemy/rival → hostile + low trust; close/familiar → friendly/allied + higher).
 
 NPCS AS RULE CARRIERS
 
@@ -365,14 +424,16 @@ When player asks about an NPC later, facts MUST match memory[] and sheet fields.
 CHARACTER CONSISTENCY
 
 Before [SCENE]: for every person mentioned, verify an id in characters[].
-Cross-check: appearance, role, location, alive/conscious, disposition, memory.
+Cross-check: appearance, role, location, alive/conscious, disposition,
+relationship (short_term + long_term + recent log), memory.
 Contradiction → fix STATE first, then write [SCENE]. Append memory on conflicts.
+Tone toward the player MUST match relationship.short_term and long_term.
 
 STATS POLICY (fixed core — never invent new core keys mid-run)
 
 All physical/skill metrics are integers 0-100:
 hp, stamina, pain, combat, firearms, awareness, composure, mobility.
-trust_to_player is -100..+100 (relationship only).
+trust_to_player is -100..+100 (numeric signal; relationship object is richer).
 Booleans: conscious, alive, known_to_player, witnesses.
 body parts: ok | bruised | cut | broken | shot | missing.
 
@@ -591,7 +652,7 @@ export const OPENING_PRESENT_INSTRUCTION =
 
 /** Phase B — background hydration: delta enrich bootstrap to full turn-1 bible. */
 export const OPENING_HYDRATION_INSTRUCTION =
-  "HYDRATION PASS (engine v6.0). The opening [SCENE] label and bootstrap STATE above are FIXED — do not contradict them. Respond with ONLY a [WORLD] block (no [SCENE]). Emit DELTA STATE merging into bootstrap: characters[] (1-3+ with full personas: personality, training, wants, fears, violence), laws[] (count from WORLDSPEC rule_density or 2-4), threads[] (2-4), end_clauses, ambient_hooks, timeline, chronicle[] (session start + any already-met NPCs as intro entries), starting_plot (ignorable), consequences scaffold, random_log [], noticed_before []. Security/authority NPCs: training professional, combat 50+, firearms 50+, will_fight_back true. Rash violence against authority must have immediate consequences — backup within 1-2 turns, lethal force for gun grabs/shooting. Omit unchanged bootstrap keys. Rich hidden detail OK.";
+  "HYDRATION PASS (engine v6.0). The opening [SCENE] label and bootstrap STATE above are FIXED — do not contradict them. Respond with ONLY a [WORLD] block (no [SCENE]). Emit DELTA STATE merging into bootstrap: characters[] (1-3+ with full personas: personality, training, wants, fears, violence, relationship with bond/short_term/long_term/log), laws[] (count from WORLDSPEC rule_density or 2-4), threads[] (2-4), end_clauses, ambient_hooks, timeline, chronicle[] (session start + any already-met NPCs as intro entries), starting_plot (ignorable), consequences scaffold, random_log [], noticed_before []. Security/authority NPCs: training professional, combat 50+, firearms 50+, will_fight_back true. Rash violence against authority must have immediate consequences — backup within 1-2 turns, lethal force for gun grabs/shooting. Omit unchanged bootstrap keys. Rich hidden detail OK.";
 
 /** @deprecated Use OPENING_PRESENT_INSTRUCTION — kept for debug API compatibility. */
 export const OPENING_INSTRUCTION = OPENING_PRESENT_INSTRUCTION;

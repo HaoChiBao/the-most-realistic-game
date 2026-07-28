@@ -1,5 +1,25 @@
 [
   {
+    "id": "2026-07-28-character-relationships",
+    "version": "0.7.6",
+    "engine": "v6.0",
+    "date": "2026-07-28",
+    "significance": 75,
+    "title": "NPC short/long-term relationships",
+    "summary": "Each NPC now keeps a living relationship with the player: short-term vibe for the current encounter, long-term bond/tags, and an append-only interaction log. The engine must update it on every interaction and match SCENE tone to it.",
+    "tags": ["engine", "characters", "story"],
+    "changes": [
+      "New characters[].relationship { bond, short_term, long_term, log[] }",
+      "bond tiers: stranger → acquaintance → familiar → close | rival | enemy",
+      "short_term vibe/stance for this encounter; long_term summary + tags + trust_trend",
+      "log[] kinds: meet, talk, help, harm, favor, betray, gift, threat, other",
+      "Prompt: seed on first meet; update on every interaction; reference before SCENE",
+      "Delta merge appends relationship.log (cap 12) and merges tags (cap 8)",
+      "relationship_to_player kept as mirror of long_term.summary",
+      "Debug: /relationships (+ /rels, /bonds); /npcs overview shows bond/short/long"
+    ]
+  },
+  {
     "id": "2026-07-28-player-timeline",
     "version": "0.7.5",
     "engine": "v6.0",

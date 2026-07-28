@@ -175,6 +175,12 @@ function mergeKeyedArray(
           "id"
         );
       }
+      if (isRecord(item.relationship) || isRecord(existing.relationship)) {
+        merged.relationship = mergeRelationship(
+          isRecord(existing.relationship) ? existing.relationship : {},
+          isRecord(item.relationship) ? item.relationship : {}
+        );
+      }
       byId.set(id, merged);
     } else {
       byId.set(id, { ...item });
@@ -188,6 +194,47 @@ function appendArray(base: unknown[], delta: unknown[]): unknown[] {
   for (const item of delta) {
     const key = JSON.stringify(item);
     if (!out.some((x) => JSON.stringify(x) === key)) out.push(item);
+  }
+  return out;
+}
+
+/** Deep-merge NPC relationship; log[] appends like memory[]. */
+export function mergeRelationship(
+  base: Record<string, unknown>,
+  delta: Record<string, unknown>
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base, ...delta };
+  if (isRecord(base.short_term) || isRecord(delta.short_term)) {
+    out.short_term = {
+      ...(isRecord(base.short_term) ? base.short_term : {}),
+      ...(isRecord(delta.short_term) ? delta.short_term : {}),
+    };
+  }
+  if (isRecord(base.long_term) || isRecord(delta.long_term)) {
+    const longBase = isRecord(base.long_term) ? base.long_term : {};
+    const longDelta = isRecord(delta.long_term) ? delta.long_term : {};
+    out.long_term = { ...longBase, ...longDelta };
+    if (Array.isArray(longDelta.tags)) {
+      const prev = Array.isArray(longBase.tags) ? longBase.tags.map(String) : [];
+      const next = longDelta.tags.map(String);
+      const mergedTags = [...prev];
+      for (const t of next) {
+        if (!mergedTags.includes(t)) mergedTags.push(t);
+      }
+      // Cap ~8 tags, drop oldest.
+      out.long_term = {
+        ...(out.long_term as Record<string, unknown>),
+        tags: mergedTags.slice(-8),
+      };
+    }
+  }
+  if (Array.isArray(delta.log)) {
+    out.log = appendArray(
+      Array.isArray(base.log) ? base.log : [],
+      delta.log
+    ).slice(-12);
+  } else if (Array.isArray(base.log) && out.log == null) {
+    out.log = base.log;
   }
   return out;
 }
