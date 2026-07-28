@@ -11,6 +11,7 @@ export type StoryBundle = {
   threads: unknown[];
   ambient_hooks: unknown[];
   timeline: unknown[];
+  chronicle: unknown[];
   end_clauses: unknown[];
   end_state: unknown;
   consequences: unknown[];
@@ -42,6 +43,11 @@ export const STORY_STATE_KEYS = [
     key: "timeline",
     role: "Off-screen / scheduled beats advancing each turn",
     prompt: "System prompt TIMELINE / stall handling",
+  },
+  {
+    key: "chronicle",
+    role: "Player-facing story beats for the timeline UI (no spoilers)",
+    prompt: "System prompt PLAYER CHRONICLE",
   },
   {
     key: "end_clauses",
@@ -78,6 +84,7 @@ export function extractStoriesFromState(state: unknown): StoryBundle | null {
     threads: Array.isArray(s.threads) ? s.threads : [],
     ambient_hooks: Array.isArray(s.ambient_hooks) ? s.ambient_hooks : [],
     timeline: Array.isArray(s.timeline) ? s.timeline : [],
+    chronicle: Array.isArray(s.chronicle) ? s.chronicle : [],
     end_clauses: Array.isArray(s.end_clauses) ? s.end_clauses : [],
     end_state: s.end_state ?? null,
     consequences: Array.isArray(s.consequences) ? s.consequences : [],
@@ -127,7 +134,7 @@ export function formatStoriesOverview(
       "(no STATE JSON parsed — stories live inside [WORLD] → STATE)",
       "",
       "Expected keys: starting_plot, threads[], active_track, ambient_hooks[],",
-      "timeline[], end_clauses[], consequences[], laws[].thread_link",
+      "timeline[], chronicle[], end_clauses[], consequences[], laws[].thread_link",
     ].join("\n");
   }
 
@@ -156,6 +163,9 @@ export function formatStoriesOverview(
     "",
     `— timeline (${bundle.timeline.length}) —`,
     bundle.timeline.length ? fmt(bundle.timeline) : "  (empty)",
+    "",
+    `— chronicle (${bundle.chronicle.length}) —`,
+    bundle.chronicle.length ? fmt(bundle.chronicle) : "  (empty)",
     "",
     `— end_clauses (${bundle.end_clauses.length}) —`,
     bundle.end_clauses.length ? fmt(bundle.end_clauses) : "  (empty)",
@@ -200,6 +210,7 @@ export function formatStoryStorageGuide(): string {
     "PLAYER VISIBILITY",
     "  • [SCENE] never dumps hidden plot truth — character POV only",
     "  • starting_plot / threads may advance off-screen via timeline",
+    "  • chronicle[] feeds the player timeline UI (experienced beats only)",
     "  • Ignoring starting_plot is valid (phase may become abandoned)",
   ].join("\n");
 }
@@ -215,6 +226,7 @@ export function extractStoryPromptExcerpts(systemPrompt: string): string {
     ["STORY DIVERGENCE", /STORY DIVERGENCE[\s\S]*?Not for routine movement\./],
     ["BRANCHING", /BRANCHING[\s\S]*?Ignoring the starting plot is valid play\./],
     ["TIMELINE / STALL", /Time and TIMELINE advance[\s\S]*?onto the starting plot\./],
+    ["PLAYER CHRONICLE", /PLAYER CHRONICLE[\s\S]*?Omit on turns with nothing new\./],
   ];
 
   const chunks: string[] = ["STORY RULES IN SYSTEM PROMPT (excerpts)", ""];

@@ -1,5 +1,21 @@
 [
   {
+    "id": "2026-07-28-player-timeline",
+    "version": "0.7.5",
+    "engine": "v6.0",
+    "date": "2026-07-28",
+    "significance": 70,
+    "title": "Player story timeline",
+    "summary": "A CRT timeline panel shows what has happened so far — character intros, your actions, scenes, fallout, and past world beats — without spoiling future engine timeline entries.",
+    "tags": ["ux", "story", "timeline"],
+    "changes": [
+      "New timeline button in the terminal meta bar opens a Story Timeline panel",
+      "Events derived from session history, NPC intros/memory, random_log, consequences, and past timeline beats",
+      "New append-only STATE.chronicle[] for short player-facing beats (no future spoilers)",
+      "Filters: all / actions / people / scenes / world / fallout"
+    ]
+  },
+  {
     "id": "2026-07-24-remove-worlds-gallery",
     "version": "0.7.4",
     "engine": "v6.0",

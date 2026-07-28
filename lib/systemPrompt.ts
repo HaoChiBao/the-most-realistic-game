@@ -98,6 +98,9 @@ DELTA rules (turn 2+):
 - heat, active_track, starting_plot: only if changed.
 - threads[], laws[], consequences[]: only entries new or changed this turn.
 - random_log[]: only NEW events this turn (append style).
+- chronicle[]: only NEW player-facing story beats this turn (append style).
+  Short labels the player already experienced — intros, fights, discoveries,
+  arrivals. NEVER future spoilers or hidden plot truth.
 - Omit world_type, ambient_hooks, timeline, noticed_before, end_clauses, etc.
   unless they actually changed.
 - TARGET: STATE JSON under 600 characters typical; hard cap ~1200 characters.
@@ -205,6 +208,9 @@ FULL STATE SCHEMA (turn 1 only — reference for opening)
   "end_state": null,
   "ambient_hooks": [],
   "timeline": [],
+  "chronicle": [
+    {"turn": 1, "kind": "session|intro|action|scene|memory|random|beat|consequence|heat|location|end", "label": "short player-facing beat", "detail": "optional", "subject": "optional id"}
+  ],
   "clock": {"time_of_day": "night", "turn": 1},
   "randomness": {"chaos": 4, "cooldown_turns": 0, "last_event_turn": null},
   "random_log": [],
@@ -525,6 +531,15 @@ When the player stalls AND is not in active combat, a light TIMELINE or ambient
 beat may fire — not a hard shove back onto the starting plot. Never use stall
 beats to introduce plot smells or hooks during a fight the player started.
 
+PLAYER CHRONICLE (player-facing timeline UI)
+
+chronicle[] is append-only, player-visible story memory — NOT the same as
+timeline[] (which may schedule future/off-screen beats).
+Each significant experienced beat: {turn, kind, label} — intros, fights won/lost,
+arrivals, discoveries the player made, soft/hard ends.
+Keep labels short (≤12 words). Never put hidden true_rule, future spoilers,
+or unknown plot truth in chronicle. Omit on turns with nothing new.
+
 BRANCHING
 
 Seed STARTING_PLOT, THREADS, LAWS, CHARACTERS, END_CLAUSES, AMBIENT_HOOKS,
@@ -576,7 +591,7 @@ export const OPENING_PRESENT_INSTRUCTION =
 
 /** Phase B — background hydration: delta enrich bootstrap to full turn-1 bible. */
 export const OPENING_HYDRATION_INSTRUCTION =
-  "HYDRATION PASS (engine v6.0). The opening [SCENE] label and bootstrap STATE above are FIXED — do not contradict them. Respond with ONLY a [WORLD] block (no [SCENE]). Emit DELTA STATE merging into bootstrap: characters[] (1-3+ with full personas: personality, training, wants, fears, violence), laws[] (count from WORLDSPEC rule_density or 2-4), threads[] (2-4), end_clauses, ambient_hooks, timeline, starting_plot (ignorable), consequences scaffold, random_log [], noticed_before []. Security/authority NPCs: training professional, combat 50+, firearms 50+, will_fight_back true. Rash violence against authority must have immediate consequences — backup within 1-2 turns, lethal force for gun grabs/shooting. Omit unchanged bootstrap keys. Rich hidden detail OK.";
+  "HYDRATION PASS (engine v6.0). The opening [SCENE] label and bootstrap STATE above are FIXED — do not contradict them. Respond with ONLY a [WORLD] block (no [SCENE]). Emit DELTA STATE merging into bootstrap: characters[] (1-3+ with full personas: personality, training, wants, fears, violence), laws[] (count from WORLDSPEC rule_density or 2-4), threads[] (2-4), end_clauses, ambient_hooks, timeline, chronicle[] (session start + any already-met NPCs as intro entries), starting_plot (ignorable), consequences scaffold, random_log [], noticed_before []. Security/authority NPCs: training professional, combat 50+, firearms 50+, will_fight_back true. Rash violence against authority must have immediate consequences — backup within 1-2 turns, lethal force for gun grabs/shooting. Omit unchanged bootstrap keys. Rich hidden detail OK.";
 
 /** @deprecated Use OPENING_PRESENT_INSTRUCTION — kept for debug API compatibility. */
 export const OPENING_INSTRUCTION = OPENING_PRESENT_INSTRUCTION;

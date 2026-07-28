@@ -585,6 +585,158 @@ a.restart {
   white-space: pre;
 }
 
+/* ---- Story timeline panel ---- */
+.tl-panel {
+  width: min(720px, 100%);
+}
+
+.tl-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(51, 255, 102, 0.2);
+}
+
+.tl-filter {
+  background: transparent;
+  border: 1px solid rgba(51, 255, 102, 0.25);
+  color: var(--phosphor-dim);
+  font: inherit;
+  font-size: clamp(10px, 1.3vmin, 11px);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.tl-filter:hover {
+  color: var(--phosphor);
+  border-color: rgba(51, 255, 102, 0.45);
+}
+
+.tl-filter.active {
+  color: #000;
+  background: var(--phosphor);
+  border-color: var(--phosphor);
+}
+
+.tl-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 14px 20px;
+}
+
+.tl-empty {
+  padding: 28px 8px;
+  color: var(--phosphor-dim);
+  font-size: clamp(11px, 1.5vmin, 13px);
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+}
+
+.tl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tl-event {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 12px;
+  min-height: 52px;
+}
+
+.tl-rail {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.tl-rail::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(51, 255, 102, 0.28);
+}
+
+.tl-event:first-child .tl-rail::before {
+  top: 14px;
+}
+
+.tl-event:last-child .tl-rail::before {
+  bottom: calc(100% - 18px);
+}
+
+.tl-dot {
+  position: relative;
+  z-index: 1;
+  margin-top: 12px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--phosphor);
+  box-shadow: 0 0 8px var(--phosphor-glow);
+  flex-shrink: 0;
+}
+
+.tl-event.kind-action .tl-dot {
+  background: #9dffb5;
+}
+
+.tl-event.kind-intro .tl-dot,
+.tl-event.kind-memory .tl-dot {
+  background: #66e0ff;
+  box-shadow: 0 0 8px rgba(102, 224, 255, 0.45);
+}
+
+.tl-event.kind-end .tl-dot,
+.tl-event.kind-heat .tl-dot,
+.tl-event.kind-consequence .tl-dot {
+  background: #ff9966;
+  box-shadow: 0 0 8px rgba(255, 153, 102, 0.4);
+}
+
+.tl-body {
+  padding: 8px 0 16px;
+  min-width: 0;
+}
+
+.tl-meta {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 4px;
+  font-size: clamp(10px, 1.25vmin, 11px);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--phosphor-dim);
+}
+
+.tl-kind {
+  opacity: 0.9;
+}
+
+.tl-label {
+  color: var(--phosphor);
+  font-size: clamp(12px, 1.7vmin, 14px);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.tl-detail {
+  margin-top: 4px;
+  color: var(--phosphor-dim);
+  font-size: clamp(10px, 1.35vmin, 12px);
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  opacity: 0.9;
+}
+
 @media (max-width: 720px) {
   .debug-body {
     grid-template-columns: 1fr;
