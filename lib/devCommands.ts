@@ -417,6 +417,82 @@ const COMMANDS: CmdDef[] = [
     },
   },
   {
+    name: "relationships",
+    aliases: ["rels", "bonds"],
+    category: "Characters",
+    blurb: "Short/long-term relationship sheets + optional NPC filter",
+    needsWorld: true,
+    run: (args, ctx) => {
+      const block = needWorld(ctx);
+      if (block) return block;
+      const bundle = extractCharactersFromState(lastState(ctx));
+      if (!bundle) {
+        return {
+          lines: [...header("RELATIONSHIPS"), "(could not parse characters[])"],
+        };
+      }
+      let chars = bundle.characters;
+      if (args) {
+        const q = args.toLowerCase();
+        chars = chars.filter(
+          (c) =>
+            c.id.toLowerCase().includes(q) ||
+            (c.name?.toLowerCase().includes(q) ?? false)
+        );
+      }
+      const lines = [...header(args ? `RELATIONSHIPS · ${args}` : "RELATIONSHIPS")];
+      if (!chars.length) {
+        lines.push("(no matching NPCs)");
+        return { lines };
+      }
+      for (const c of chars) {
+        const r = c.relationship;
+        lines.push(`— ${c.name ?? c.id} —`);
+        lines.push(`  disposition: ${c.disposition ?? "(?)"}  trust: ${c.trust_to_player ?? "(?)"}`);
+        if (!r) {
+          lines.push(
+            `  relationship: (none — legacy: ${c.relationship_to_player ?? "n/a"})`
+          );
+          lines.push("");
+          continue;
+        }
+        lines.push(`  bond: ${r.bond ?? "(unset)"}`);
+        if (r.short_term) {
+          lines.push(
+            `  short: ${[r.short_term.vibe, r.short_term.stance].filter(Boolean).join(" · ") || "(empty)"}${
+              r.short_term.updated_turn != null
+                ? ` (t${r.short_term.updated_turn})`
+                : ""
+            }`
+          );
+        }
+        if (r.long_term) {
+          lines.push(
+            `  long: ${r.long_term.summary ?? "(empty)"}${
+              r.long_term.trust_trend ? ` · ${r.long_term.trust_trend}` : ""
+            }`
+          );
+          if (r.long_term.tags?.length) {
+            lines.push(`  tags: ${r.long_term.tags.join(", ")}`);
+          }
+        }
+        const log = r.log ?? [];
+        if (log.length) {
+          lines.push("  log:");
+          for (const e of log.slice(-8)) {
+            lines.push(
+              `    t${e.turn}${e.kind ? ` [${e.kind}]` : ""} (${e.scope}): ${e.event}`
+            );
+          }
+        } else {
+          lines.push("  log: (empty)");
+        }
+        lines.push("");
+      }
+      return { lines };
+    },
+  },
+  {
     name: "story",
     aliases: ["plot"],
     category: "Story",

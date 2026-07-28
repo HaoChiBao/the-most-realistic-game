@@ -31,6 +31,26 @@ STATE
     "personality": ["by-the-book", "alert"],
     "disposition": "hostile",
     "trust_to_player": -60,
+    "relationship_to_player": "assaulted security — now being restrained",
+    "relationship": {
+      "bond": "enemy",
+      "short_term": {
+        "vibe": "furious and pinning you",
+        "stance": "restraining",
+        "updated_turn": 4
+      },
+      "long_term": {
+        "summary": "you assaulted him; he will not forgive quickly",
+        "tags": ["assaulted", "restrained_player"],
+        "trust_trend": "falling",
+        "updated_turn": 4
+      },
+      "log": [
+        {"turn": 2, "kind": "harm", "event": "player tackled him", "scope": "both"},
+        {"turn": 3, "kind": "harm", "event": "player threw phone", "scope": "short"},
+        {"turn": 4, "kind": "harm", "event": "pinned player after assault", "scope": "both"}
+      ]
+    },
     "violence": "fight",
     "combat_posture": "restraining_player",
     "will_fight_back": true,
@@ -57,13 +77,25 @@ assert(bundle?.characters[0].id === "guard_marcus", "guard id");
 assert(bundle?.hostile_count === 1, "hostile guard");
 assert(bundle?.combat_ready === 1, "combat ready");
 assert((bundle?.characters[0].memory?.length ?? 0) === 3, "memory entries");
+assert(bundle?.characters[0].relationship?.bond === "enemy", "relationship bond");
+assert(
+  (bundle?.characters[0].relationship?.log?.length ?? 0) === 3,
+  "relationship log"
+);
 
 const overview = formatCharactersOverview(bundle);
 assert(overview.includes("Marcus"), "overview names guard");
 assert(overview.includes("restraining_player"), "overview shows posture");
 assert(overview.includes("pinned player"), "overview shows memory");
+assert(overview.includes("bond: enemy"), "overview shows bond");
+assert(overview.includes("furious and pinning"), "overview shows short vibe");
+assert(overview.includes("assaulted him"), "overview shows long summary");
 assert(overview.includes("hp 70"), "overview shows hp");
 assert(overview.includes("combat 55"), "overview shows combat");
+assert(
+  SYSTEM_PROMPT.includes("RELATIONSHIP TRACKING"),
+  "prompt has relationship section"
+);
 
 const sections = buildDebugSections({
   history: [{ role: "assistant", content: raw }],
