@@ -1,5 +1,22 @@
 [
   {
+    "id": "2026-07-30-phase-0-fairness",
+    "version": "0.7.7",
+    "engine": "v6.0",
+    "date": "2026-07-30",
+    "significance": 80,
+    "title": "Fairer combat consequences + share engine gate",
+    "summary": "Broken legs no longer trigger detention timers, civilian gun grabs no longer invent police shootings, fights target who is in the room, and shared seeds refuse to load across engine mismatches.",
+    "tags": ["engine", "combat", "persistence"],
+    "changes": [
+      "Detention only for real restraint conditions (not mobility gates like sprint)",
+      "Lethal authority endings require a present officer (location / scene) — no fake SHOT BY POLICE",
+      "Combat/authority targeting prefers NPCs at player_location",
+      "Shared world load returns engineVer and HTTP 409 on mismatch",
+      "Repo now ships full Supabase worlds schema + load_world migration"
+    ]
+  },
+  {
     "id": "2026-07-28-character-relationships",
     "version": "0.7.6",
     "engine": "v6.0",

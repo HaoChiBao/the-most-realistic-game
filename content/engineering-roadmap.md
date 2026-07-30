@@ -30,77 +30,67 @@ the WorldBible and rejects illegal transitions.
 
 Fix known false positives and persistence gaps before adding new systems.
 
-### 0.1 Fix restraint / detention false positives — S
+### 0.1 Fix restraint / detention false positives — S ✅
 
 **Problem:** `playerRestrained` treats any non-resolved condition with
 `gates` including `"sprint"` as restrained (e.g. broken leg → detention timer).
 
 **Files:** `lib/actionConsequence.ts`
 
-**Work:**
-- Restrained only when `kind === "restraint"` **or** label matches cuff/pin/restrain
-- Do **not** treat mobility gates alone as detention
-- Scene text cue can remain as secondary signal
+**Shipped:** restrained only when `kind === "restraint"` **or** label matches
+cuff/pin/restrain; mobility gates alone never count; SCENE cue remains secondary.
 
 **Tests:** `scripts/test-action-consequence.ts`
 - trauma + `gates: ["sprint"]` + wait spam → no detention injection
 - real restraint condition + wait ×2 → detention fires
 
-### 0.2 Fix lethal targeting — S
+### 0.2 Fix lethal targeting — S ✅
 
 **Problem:** `resolveLethalConsequence` fires from action text alone and falls
 back to “the officer”, so civilian gun grabs can emit `SHOT BY POLICE`.
 
-**Files:** `lib/actionConsequence.ts`
+**Files:** `lib/actionConsequence.ts`, `lib/npcSelect.ts`
 
-**Work:**
-- Require a present authority NPC (role/archetype/authority_level) **or**
-  explicit armed-authority context in last SCENE
-- Prefer location-scoped target (`characters[].location === player_location`)
-- If no authority target: skip lethal block (combat escalation may still apply)
+**Shipped:** lethal requires a present authority target (location / SCENE mention,
+or armed-authority SCENE cue); no inventing “the officer”.
 
 **Tests:**
 - “grab his gun” with only civilian in scene → no lethal authority block
 - “grab his gun” with officer in same location → lethal fires
 - officer elsewhere in registry, civilian here → no false police ending
 
-### 0.3 Location-scope combat escalation targets — S/M
+### 0.3 Location-scope combat escalation targets — S/M ✅
 
 **Problem:** `pickCombatNpc` / `pickAuthorityNpc` can pick the highest-combat
 NPC in the whole registry, not the person in the fight.
 
-**Files:** `lib/combatContext.ts`, `lib/actionConsequence.ts`
+**Files:** `lib/npcSelect.ts`, `lib/combatContext.ts`, `lib/actionConsequence.ts`
 
-**Work:**
-- Prefer NPCs at `player_location`
-- Then hostile / combat_posture / mentioned in last SCENE
-- Global registry only as last resort
+**Shipped:** shared picker prefers `player_location`, then SCENE-mentioned /
+hostile posture; global registry only as last resort (never for lethal /
+first-assault authority).
 
 **Tests:** `scripts/test-combat-context.ts` — two NPCs, wrong-room high-combat ignored
 
-### 0.4 Enforce `engine_ver` on shared world load — S
+### 0.4 Enforce `engine_ver` on shared world load — S ✅
 
 **Problem:** create stores `engine_ver`; load ignores it. Stale shares break quietly.
 
-**Files:** `app/api/seed/[code]/route.ts`, Terminal load path, Supabase `load_world` if needed
+**Files:** `app/api/seed/[code]/route.ts`, `lib/seedLoad.ts`, Supabase `load_world`
 
-**Work:**
-- Return `engine_ver` from load API
-- If mismatch with `ENGINE_VERSION`: clear error (“world built for older engine”)
-  or explicit migrate path later
-- Do not silently play incompatible bibles
+**Shipped:** load API returns `engineVer`; mismatch / missing → HTTP 409 and no
+opening/world payload. Terminal surfaces the API error via existing fail path.
 
-**Tests:** unit test for load response handling; manual share checklist update
+**Tests:** `scripts/test-seed-load.ts`; manual share checklist item 11
 
-### 0.5 Complete Supabase schema in repo — M
+### 0.5 Complete Supabase schema in repo — M ✅
 
 **Problem:** only `create_world` migration present; `worlds` / `load_world` assumed.
 
-**Files:** `supabase/migrations/`
+**Files:** `supabase/migrations/20260708000000_worlds_schema.sql`, README
 
-**Work:**
-- Add canonical migrations for `public.worlds`, `load_world`, grants/RLS as used in prod
-- Document bootstrap in README seed section
+**Shipped:** canonical `public.worlds` + `create_world` + `load_world` (returns
+`engine_ver`) + RLS/grants; README seed bootstrap section.
 
 **Done when:** fresh Supabase project can apply migrations and share/load works
 

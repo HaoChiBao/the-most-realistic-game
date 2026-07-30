@@ -56,6 +56,17 @@ Copy `.env.example` → `.env.local` for the full template. Seed sharing stores
 turn-1 SCENE + WORLD in Supabase (`public.worlds` via SECURITY DEFINER RPCs).
 Schema changes live under `supabase/migrations/`.
 
+### Seed sharing bootstrap
+
+1. Create a Supabase project.
+2. Apply SQL migrations in order from `supabase/migrations/` (CLI
+   `supabase db push`, or paste each file into the SQL editor).
+   The baseline creates `public.worlds`, `create_world`, and `load_world`.
+3. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` /
+   Vercel. (`SUPABASE_ANON_KEY` works for local/dev; RPCs are SECURITY DEFINER.)
+4. Share a world in-game, then open `/s/CODE` — load refuses on `engine_ver`
+   mismatch with the server `ENGINE_VERSION`.
+
 ## Tests & CI
 
 ```bash

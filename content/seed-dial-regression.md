@@ -20,6 +20,7 @@ Manual checklist for engine **v5.0**. Digits bias generation; stored bible remai
 8. **No plot-from-digits** — Opening is not a genre label from dials; character-POV opening only.
 9. **Share exactness** — `/s/CODE` loads the same turn-1 SCENE+WORLD as the creator (no regen from digits).
 10. **Consistency** — Breaking a *known* law updates consequences and shows cost in SCENE.
+11. **Engine bump refuse** — A world stored under an older `engine_ver` must fail load with a clear error (HTTP 409); never silently play an incompatible bible.
 
 ## Sign-off
 
