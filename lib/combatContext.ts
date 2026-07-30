@@ -1,4 +1,5 @@
 import type { ClientTurn } from "@/lib/gameMessages";
+import { pickCombatNpc } from "@/lib/npcSelect";
 import { extractSceneBlock, extractStateJson } from "@/lib/stateParse";
 
 const ATTACK_RE =
@@ -30,16 +31,6 @@ export type CombatEscalationResult = {
   prompt_block: string;
 };
 
-type NpcSlice = {
-  id: string;
-  name: string;
-  role: string;
-  combat: number;
-  training: string;
-  disposition: string;
-  combat_posture: string;
-};
-
 function lastUserAction(history: ClientTurn[]): string {
   for (let i = history.length - 1; i >= 0; i--) {
     if (history[i].role === "user") return history[i].content;
@@ -68,33 +59,6 @@ function numStat(stats: unknown, key: string, fallback: number): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
 
-function pickCombatNpc(state: Record<string, unknown>): NpcSlice | null {
-  const raw = Array.isArray(state.characters) ? state.characters : [];
-  const npcs: NpcSlice[] = raw
-    .filter((c): c is Record<string, unknown> => !!c && typeof c === "object")
-    .map((c) => ({
-      id: String(c.id ?? ""),
-      name: String(c.name ?? c.id ?? "npc"),
-      role: String(c.role ?? ""),
-      combat: numStat(c.stats, "combat", 30),
-      training: String(c.training ?? "basic"),
-      disposition: String(c.disposition ?? "neutral"),
-      combat_posture: String(c.combat_posture ?? "relaxed"),
-    }))
-    .filter((c) => c.id && c.id !== "player");
-
-  if (npcs.length === 0) return null;
-
-  const hostile = npcs.filter(
-    (n) =>
-      n.disposition === "hostile" ||
-      COMBAT_POSTURES.has(n.combat_posture) ||
-      /guard|officer|cop|security|bouncer/i.test(n.role)
-  );
-  const pool = hostile.length > 0 ? hostile : npcs;
-  return pool.sort((a, b) => b.combat - a.combat)[0];
-}
-
 /**
  * When the player is mid-assault, inject a hard mandate so trained NPCs
  * actually end the fight instead of stalling with passive blocking.
@@ -115,7 +79,8 @@ export function resolveCombatEscalation(
 
   const state = lastRaw ? extractStateJson(lastRaw) : null;
   const s = state && typeof state === "object" ? (state as Record<string, unknown>) : null;
-  const npc = s ? pickCombatNpc(s) : null;
+  // Prefer co-located / mentioned NPCs; global registry only as last resort.
+  const npc = pickCombatNpc(s, { scene: lastScene, allowGlobalFallback: true });
 
   const stateInCombat =
     !!npc &&
