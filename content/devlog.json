@@ -6,14 +6,18 @@
     "date": "2026-07-31",
     "significance": 90,
     "title": "WorldBible runtime + STATE validation",
-    "summary": "The runtime now owns a typed WorldBible. Illegal STATE patches are rejected or repaired before commit, and hydration must pass a playable contract (with one retry) before the world is marked ready.",
-    "tags": ["engine", "state", "hydration"],
+    "summary": "The runtime now owns a typed WorldBible. Illegal STATE patches are rejected or repaired before commit, and hydration must pass a playable contract (with one retry) before the world is marked ready. Debug panel and slash commands expose the live bible and last audit results.",
+    "tags": ["engine", "state", "hydration", "debug"],
     "changes": [
       "New typed WorldBible (normalize + Terminal bibleRef alongside history)",
       "commitAssistantState validates clock, location, exits, alive, stats, grounded abilities",
       "Hard validation failures keep the previous bible instead of trusting bad deltas",
       "Hydration contract gate: laws, exits, player sheet, NPC personas, starting_plot",
-      "One automatic hydrate retry on contract failure; soft warning + patched defaults if still thin"
+      "One automatic hydrate retry on contract failure; soft warning + patched defaults if still thin",
+      "Debug panel: WorldBible overview/JSON, last commit validation, hydration contract",
+      "Dev commands: /bible (/wb), /validate (/audit), /hydrate (/contract)",
+      "Terminal surfaces bible reject + hydration soft notes in the log",
+      "/bible no longer aliases /opening (use /opening or /turn1 for turn-1 stories)"
     ]
   },
   {

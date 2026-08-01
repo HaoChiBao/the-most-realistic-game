@@ -26,6 +26,8 @@ import {
   worldBibleFromHistory,
   type WorldBible,
 } from "@/lib/worldBible";
+import type { BibleCommitAudit, HydrationAudit } from "@/lib/bibleDebug";
+import type { ValidateIssue } from "@/lib/stateValidate";
 import { extractStateJson } from "@/lib/stateParse";
 import { readGameStreamBody } from "@/lib/readGameStream";
 import {
@@ -136,6 +138,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
 
   const historyRef = useRef<Turn[]>([]);
   const bibleRef = useRef<WorldBible | null>(null);
+  const lastCommitAuditRef = useRef<BibleCommitAudit | null>(null);
+  const lastHydrationAuditRef = useRef<HydrationAudit | null>(null);
   const syncTimingsRef = useRef<SyncTimingRecord[]>([]);
   const checkpointsRef = useRef<Checkpoint[]>([]);
   const openingWorldRef = useRef<Turn | null>(null);
@@ -157,6 +161,24 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
   const engineVersionRef = useRef<string | undefined>(undefined);
 
   const nextId = () => ++idRef.current;
+
+  const recordCommitAudit = useCallback(
+    (
+      source: BibleCommitAudit["source"],
+      issues: ValidateIssue[],
+      rejected: boolean
+    ) => {
+      lastCommitAuditRef.current = {
+        at: new Date().toISOString(),
+        source,
+        rejected,
+        issueCount: issues.length,
+        issues,
+      };
+      setDebugTick((t) => t + 1);
+    },
+    []
+  );
 
   const persistSession = useCallback(() => {
     if (historyRef.current.length === 0) return;
@@ -247,6 +269,9 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       ended: endedRef.current,
       softEnded: softEndedRef.current,
       endLabel: endLabelRef.current,
+      bible: bibleRef.current,
+      lastCommitAudit: lastCommitAuditRef.current,
+      lastHydrationAudit: lastHydrationAuditRef.current,
     };
   }, []);
 
@@ -407,12 +432,14 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
           stripControlTokens(raw)
         );
         let contract = assertHydrationContract(merge.state, contractOpts);
+        let retried = false;
 
         // One automatic hydrate retry on contract failure.
         if (!contract.ok) {
           const retryRaw = await fetchHydrateRaw();
           if (myRun !== runIdRef.current) return;
           if (retryRaw != null) {
+            retried = true;
             merge = mergeHydrationIntoOpeningDetailed(
               opening.content,
               stripControlTokens(retryRaw)
@@ -423,6 +450,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
 
         let content = merge.content;
         let bible = merge.bible;
+        let softPatched = false;
         if (!contract.ok) {
           // Soft warning + play with bootstrap-patched defaults.
           const patched = rewriteWorldState(
@@ -431,6 +459,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
           );
           content = patched;
           bible = normalizeWorldBible(contract.state);
+          softPatched = true;
           addEntry(
             "system",
             `hydration soft — ${contract.failures.slice(0, 2).join("; ")}`
@@ -440,6 +469,14 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         historyRef.current[0] = { role: "assistant", content };
         openingWorldRef.current = { ...historyRef.current[0] };
         bibleRef.current = bible;
+        lastHydrationAuditRef.current = {
+          at: new Date().toISOString(),
+          ok: contract.ok,
+          failures: [...contract.failures],
+          retried,
+          softPatched,
+        };
+        recordCommitAudit("hydrate", merge.issues, false);
         finishHydration(Math.round(performance.now() - hydrateStart), true);
       } catch (err) {
         if (myRun !== runIdRef.current) return;
@@ -447,7 +484,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         finishHydration(Math.round(performance.now() - hydrateStart), false);
       }
     },
-    [addEntry, focusInput, persistSession]
+    [addEntry, focusInput, persistSession, recordCommitAudit]
   );
 
   const startHydration = useCallback(
@@ -536,6 +573,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       historyRef.current.push(assistantTurn);
       openingWorldRef.current = { ...assistantTurn };
       bibleRef.current = committed.bible;
+      recordCommitAudit("present", committed.issues, committed.rejected);
 
       const typingMs = Math.round((sceneRevealedAt ?? finishedAt) - turnStart);
       startHydration(myRun, typingMs, cleanScene.length, true);
@@ -657,6 +695,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     focusInput,
     persistSession,
     startHydration,
+    recordCommitAudit,
   ]);
 
   const streamTurn = useCallback(async () => {
@@ -739,6 +778,16 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       };
       historyRef.current.push(assistantTurn);
       bibleRef.current = committed.bible;
+      recordCommitAudit("play", committed.issues, committed.rejected);
+      if (committed.rejected) {
+        addEntry(
+          "system",
+          `bible reject — kept prior STATE (${committed.issues
+            .filter((i) => i.severity === "reject")
+            .map((i) => i.code)
+            .join(", ") || "invalid transition"})`
+        );
+      }
 
       if (!openingWorldRef.current) {
         openingWorldRef.current = { ...assistantTurn };
@@ -903,7 +952,14 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         focusInput();
       }
     }
-  }, [addEntry, scrollToBottom, setEntryText, focusInput, persistSession]);
+  }, [
+    addEntry,
+    scrollToBottom,
+    setEntryText,
+    focusInput,
+    persistSession,
+    recordCommitAudit,
+  ]);
 
   const failSeedLoad = useCallback(
     (code: string, message: string) => {
@@ -955,6 +1011,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
           seedState && typeof seedState === "object"
             ? normalizeWorldBible(seedState as Record<string, unknown>)
             : null;
+        lastHydrationAuditRef.current = null;
+        recordCommitAudit("seed", [], false);
         seedRef.current = code;
         seedSavedRef.current = true;
         setSeedLoadFailed(false);
@@ -976,7 +1034,14 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         failSeedLoad(code, `COULD NOT LOAD SEED. ${String(err)}`);
       }
     },
-    [addEntry, revealText, focusInput, persistSession, failSeedLoad]
+    [
+      addEntry,
+      revealText,
+      focusInput,
+      persistSession,
+      failSeedLoad,
+      recordCommitAudit,
+    ]
   );
 
   const resetForNewWorld = useCallback(() => {
@@ -985,6 +1050,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     clearSession();
     historyRef.current = [];
     bibleRef.current = null;
+    lastCommitAuditRef.current = null;
+    lastHydrationAuditRef.current = null;
     syncTimingsRef.current = [];
     checkpointsRef.current = [];
     openingWorldRef.current = null;
@@ -1091,6 +1158,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     if (saved && canRestoreSession(saved, seedCode)) {
       historyRef.current = saved.history.map((t) => ({ ...t }));
       bibleRef.current = worldBibleFromHistory(historyRef.current);
+      recordCommitAudit("restore", [], false);
       idRef.current = saved.nextEntryId;
       seedRef.current = saved.seedCode;
       // Only mark persisted if this boot is from a shared deep link.
@@ -1148,7 +1216,15 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     }
 
     await beginFreshWorld();
-  }, [seedCode, focusInput, streamTurn, beginFreshWorld, fetchEngineVersion, startHydration]);
+  }, [
+    seedCode,
+    focusInput,
+    streamTurn,
+    beginFreshWorld,
+    fetchEngineVersion,
+    startHydration,
+    recordCommitAudit,
+  ]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -1318,6 +1394,8 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     setBooted(true);
     historyRef.current.push({ ...opening });
     bibleRef.current = worldBibleFromHistory(historyRef.current);
+    lastHydrationAuditRef.current = null;
+    recordCommitAudit("restore", [], false);
     const scene = parseScene(opening.content).scene;
     void revealText(scene).then(() => {
       setSceneReady(true);
@@ -1327,7 +1405,15 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
       focusInput();
       persistSession();
     });
-  }, [busy, newWorld, revealText, focusInput, persistSession, seedCode]);
+  }, [
+    busy,
+    newWorld,
+    revealText,
+    focusInput,
+    persistSession,
+    seedCode,
+    recordCommitAudit,
+  ]);
 
   const rewind = useCallback(() => {
     if (busy) return;
@@ -1335,6 +1421,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     if (!cp) return;
     historyRef.current = cp.history.map((t) => ({ ...t }));
     bibleRef.current = worldBibleFromHistory(historyRef.current);
+    recordCommitAudit("rewind", [], false);
     setEntries(cp.entries.map((e) => ({ ...e })));
     idRef.current = cp.entries.reduce((m, e) => Math.max(m, e.id), 0);
     setEnded(false);
@@ -1346,7 +1433,7 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
     setInput("");
     focusInput();
     persistSession();
-  }, [busy, focusInput, persistSession]);
+  }, [busy, focusInput, persistSession, recordCommitAudit]);
 
   const remaining = MAX_INPUT - input.length;
   const showCursor = busy || !booted;
@@ -1564,6 +1651,9 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
           sceneReady,
           worldHydrating,
           syncTimings: syncTimingsRef.current,
+          bible: bibleRef.current,
+          lastCommitAudit: lastCommitAuditRef.current,
+          lastHydrationAudit: lastHydrationAuditRef.current,
         }}
       />
 

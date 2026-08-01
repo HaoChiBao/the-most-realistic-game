@@ -496,6 +496,7 @@ export type HydrationMergeResult = {
   content: string;
   bible: WorldBible;
   state: Record<string, unknown>;
+  issues: ValidateIssue[];
 };
 
 export function mergeHydrationIntoOpeningDetailed(
@@ -516,6 +517,7 @@ export function mergeHydrationIntoOpeningDetailed(
       content: openingContent,
       bible,
       state: worldBibleToRecord(bible),
+      issues: [],
     };
   }
 
@@ -534,5 +536,6 @@ export function mergeHydrationIntoOpeningDetailed(
     content: rewriteWorldState(openingContent, record),
     bible,
     state: record,
+    issues: validated.issues,
   };
 }
