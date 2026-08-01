@@ -284,15 +284,30 @@ export function buildPlayerTimeline(history: Turn[]): PlayerTimeline {
   if (chars) {
     for (const c of chars.characters) {
       if (c.known_to_player === false) continue;
-      const name = c.name ?? c.id;
+      // Prefer earned name; legacy sheets without player_knowledge keep prior labels.
+      const hasPk = c.player_knowledge != null;
+      const nameKnown = hasPk
+        ? c.player_knowledge!.name_known === true
+        : !!c.name;
+      const roleKnown = hasPk
+        ? c.player_knowledge!.role_known === true
+        : !!c.role;
+      const labelName = nameKnown
+        ? (c.name ?? c.id)
+        : c.appearance
+          ? shortText(String(c.appearance), 40)
+          : "a stranger";
       const introTurn = c.introduced_turn ?? 1;
       if (introTurn <= currentTurn) {
         pushUnique(events, {
           id: `intro-${c.id}`,
           turn: introTurn,
           kind: "intro",
-          label: `Met ${name}`,
-          detail: [c.role, c.archetype].filter(Boolean).join(" · ") || undefined,
+          label: nameKnown ? `Met ${labelName}` : `Noticed ${labelName}`,
+          detail:
+            [roleKnown ? c.role : null, c.archetype]
+              .filter(Boolean)
+              .join(" · ") || undefined,
           subject: c.id,
         });
       }
@@ -303,7 +318,7 @@ export function buildPlayerTimeline(history: Turn[]): PlayerTimeline {
           turn: mem.turn,
           kind: "memory",
           label: shortText(mem.event, 120),
-          detail: `${name}${mem.emotional_weight ? ` · ${mem.emotional_weight}` : ""}`,
+          detail: `${labelName}${mem.emotional_weight ? ` · ${mem.emotional_weight}` : ""}`,
           subject: c.id,
         });
       }

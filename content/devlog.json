@@ -1,5 +1,25 @@
 [
   {
+    "id": "2026-08-01-player-knowledge",
+    "version": "0.8.1",
+    "engine": "v6.1",
+    "date": "2026-08-01",
+    "significance": 85,
+    "title": "Strangers stay strangers until you meet them",
+    "summary": "Looking around no longer names people or dumps their job and life story. You see a woman in a grey jumpsuit — not “Jane Doe, the building superintendent.” Approach, talk, and ask before the world fills in the rest.",
+    "tags": ["engine", "characters", "pov", "abstraction"],
+    "changes": [
+      "Glance / look around: physical descriptions only — no proper names, no job titles, no biography",
+      "Names unlock after introduction, asking, or reading a badge/ID",
+      "Jobs and roles unlock when told, or when a uniform/badge makes them obvious",
+      "whois / who is she answers only what you have earned — no omniscient dossier",
+      "Typical order: look → approach & talk → ask name → ask job → personal questions",
+      "Same idea for closed drawers, unread papers, and other people’s pockets",
+      "Engine tracks what you know per person (seen / talked / name / role / backstory)",
+      "Engine version bump to v6.1 — start a new session; old shared worlds need a re-share"
+    ]
+  },
+  {
     "id": "2026-07-31-world-bible",
     "version": "0.8.0",
     "engine": "v6.0",

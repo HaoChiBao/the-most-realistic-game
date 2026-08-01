@@ -6,6 +6,10 @@ import {
 import type { RandomRollResult } from "@/lib/randomness";
 import type { ActionConsequenceResult } from "@/lib/actionConsequence";
 import { buildOpeningInstruction, decodeSeed } from "@/lib/worldSpec";
+import {
+  buildKnowledgePromptBlock,
+  extractLatestStateFromHistory,
+} from "@/lib/playerKnowledge";
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 export type ClientTurn = { role: "user" | "assistant"; content: string };
@@ -78,6 +82,11 @@ export function buildGameMessages(
       if (consequence?.fired) injections.push(consequence.prompt_block);
       if (roll) injections.push(roll.prompt_block);
       if (hasPriorWorld) injections.push(DELTA_STATE_REMINDER);
+      if (hasPriorWorld) {
+        const priorState = extractLatestStateFromHistory(trimmed);
+        const knowledgeBlock = buildKnowledgePromptBlock(priorState);
+        if (knowledgeBlock) injections.push(knowledgeBlock);
+      }
       if (injections.length > 0) {
         content = `${content}\n\n${injections.join("\n\n")}`;
       }

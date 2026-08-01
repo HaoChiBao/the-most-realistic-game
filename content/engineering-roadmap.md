@@ -228,14 +228,32 @@ Next: server also picks **outcome class** from a small seeded table
 
 ## Phase 3 — Character & world continuity (P1/P2)
 
-### 3.1 SCENE name ↔ registry audit — M
+### 3.1 SCENE name ↔ registry audit — M (partial ✅)
 
-**New:** light NER/heuristic in `lib/sceneCharacters.ts`
-- Extract capitalized names / role nouns from SCENE
-- Diff against `characters[]`
-- Missing → next-turn injection: “add sheets for: …” **or** strip illegal proper names (prefer inject)
+**Shipped (light):** `extractScenePersonHints` + `scene_name_unregistered` warn in
+`lib/stateValidate.ts` when SCENE names someone without a `characters[]` sheet.
+
+**Still open:** dedicated `lib/sceneCharacters.ts` NER + next-turn inject/strip.
 
 **Tests:** scene mentions “Officer Diaz” without sheet → flag
+
+### 3.1b Progressive player knowledge (NPC abstraction) — M ✅
+
+**Problem:** “look around” named strangers and dumped job/biography; whois
+answered from the full sheet before the player approached or asked.
+
+**Shipped:**
+- `characters[].player_knowledge` { seen, name_known, role_known, talked, backstory_known }
+- Prompt gating + earning order (look → talk → ask name → role/backstory)
+- Per-turn `[PLAYER KNOWLEDGE — server authoritative]` injection in `gameMessages`
+- `auditSceneKnowledge` warns on premature name/role/backstory in SCENE
+- Timeline UI uses abstract labels until `name_known`
+- Engine bump to v6.1
+
+**Files:** `lib/playerKnowledge.ts`, `lib/systemPrompt.ts`, `lib/gameMessages.ts`,
+`lib/stateValidate.ts`, `lib/playerTimeline.ts`, `lib/characterDebug.ts`
+
+**Tests:** `scripts/test-player-knowledge.ts`
 
 ### 3.2 Memory compaction — S/M
 
