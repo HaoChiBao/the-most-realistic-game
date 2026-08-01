@@ -341,10 +341,12 @@ Update `content/seed-dial-regression.md` + `casino-regression.md`:
 - chill exploration (no railroad)
 - shared seed load across engine bump (expect refuse)
 
-### 6.3 Debug panel: bible diff
+### 6.3 Debug panel: bible diff — partial ✅
 
-Show last committed bible vs model-proposed delta + validation errors.
-Makes prompt iteration vastly faster.
+**Shipped:** live WorldBible overview/JSON, last commit validation, hydration
+contract in debug panel + `/bible` `/validate` `/hydrate`.
+
+**Still open:** side-by-side last committed bible vs model-proposed delta diff.
 
 ### 6.4 Rate limit / multi-instance
 
