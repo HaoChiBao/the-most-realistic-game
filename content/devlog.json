@@ -1,5 +1,22 @@
 [
   {
+    "id": "2026-07-31-world-bible",
+    "version": "0.8.0",
+    "engine": "v6.0",
+    "date": "2026-07-31",
+    "significance": 90,
+    "title": "WorldBible runtime + STATE validation",
+    "summary": "The runtime now owns a typed WorldBible. Illegal STATE patches are rejected or repaired before commit, and hydration must pass a playable contract (with one retry) before the world is marked ready.",
+    "tags": ["engine", "state", "hydration"],
+    "changes": [
+      "New typed WorldBible (normalize + Terminal bibleRef alongside history)",
+      "commitAssistantState validates clock, location, exits, alive, stats, grounded abilities",
+      "Hard validation failures keep the previous bible instead of trusting bad deltas",
+      "Hydration contract gate: laws, exits, player sheet, NPC personas, starting_plot",
+      "One automatic hydrate retry on contract failure; soft warning + patched defaults if still thin"
+    ]
+  },
+  {
     "id": "2026-07-30-phase-0-fairness",
     "version": "0.7.7",
     "engine": "v6.0",
