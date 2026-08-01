@@ -298,6 +298,14 @@ SHEET LIFECYCLE
 - Off-screen NPCs with high npc_agency may move, act, call backup, or escalate
   without being in [SCENE] — still update their sheets.
 
+NPC NAMING (server name pool — no placeholders)
+
+When [NAME POOL — server authoritative] is present, assign those strings to
+characters[].name in order. Never invent stock placeholders:
+  Jane Doe, John Doe, John Smith, Jane Smith, Foo Bar, "NPC 1", role-as-name.
+Prefer slightly uncommon but real-feeling contemporary names. Full legal name
+lives in STATE; SCENE still waits on player_knowledge.name_known.
+
 PLAYER KNOWLEDGE (characters[].player_knowledge — progressive disclosure)
 
 Full truth stays in STATE. SCENE reveals only what THIS character has earned.
@@ -706,7 +714,7 @@ export const OPENING_PRESENT_INSTRUCTION =
 
 /** Phase B — background hydration: delta enrich bootstrap to full turn-1 bible. */
 export const OPENING_HYDRATION_INSTRUCTION =
-  "HYDRATION PASS (engine v6.1). The opening [SCENE] label and bootstrap STATE above are FIXED — do not contradict them. Respond with ONLY a [WORLD] block (no [SCENE]). Emit DELTA STATE merging into bootstrap: characters[] (1-3+ with full personas: personality, training, wants, fears, violence, relationship with bond/short_term/long_term/log, player_knowledge all false — names/roles are STATE truth only), laws[] (count from WORLDSPEC rule_density or 2-4), threads[] (2-4), end_clauses, ambient_hooks, timeline, chronicle[] (session start only — do NOT add NPC intro entries until the player meets them), starting_plot (ignorable), consequences scaffold, random_log [], noticed_before []. Security/authority NPCs: training professional, combat 50+, firearms 50+, will_fight_back true. Rash violence against authority must have immediate consequences — backup within 1-2 turns, lethal force for gun grabs/shooting. Omit unchanged bootstrap keys. Rich hidden detail OK — never leaked into future SCENE until player_knowledge earns it.";
+  "HYDRATION PASS (engine v6.1). The opening [SCENE] label and bootstrap STATE above are FIXED — do not contradict them. Respond with ONLY a [WORLD] block (no [SCENE]). Emit DELTA STATE merging into bootstrap: characters[] (1-3+ with full personas: personality, training, wants, fears, violence, relationship with bond/short_term/long_term/log, player_knowledge all false — names/roles are STATE truth only; assign characters[].name from the [NAME POOL] block — never Jane Doe / John Smith), laws[] (count from WORLDSPEC rule_density or 2-4), threads[] (2-4), end_clauses, ambient_hooks, timeline, chronicle[] (session start only — do NOT add NPC intro entries until the player meets them), starting_plot (ignorable), consequences scaffold, random_log [], noticed_before []. Security/authority NPCs: training professional, combat 50+, firearms 50+, will_fight_back true. Rash violence against authority must have immediate consequences — backup within 1-2 turns, lethal force for gun grabs/shooting. Omit unchanged bootstrap keys. Rich hidden detail OK — never leaked into future SCENE until player_knowledge earns it.";
 
 /** @deprecated Use OPENING_PRESENT_INSTRUCTION — kept for debug API compatibility. */
 export const OPENING_INSTRUCTION = OPENING_PRESENT_INSTRUCTION;
