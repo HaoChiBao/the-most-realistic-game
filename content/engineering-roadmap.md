@@ -100,7 +100,7 @@ opening/world payload. Terminal surfaces the API error via existing fail path.
 
 Highest leverage. Demote raw chat JSON from “source of truth” to “transport”.
 
-### 1.1 Typed WorldBible module — M
+### 1.1 Typed WorldBible module — M ✅
 
 **New:** `lib/worldBible.ts` (types + empty/minimal factories)
 
@@ -109,14 +109,14 @@ Highest leverage. Demote raw chat JSON from “source of truth” to “transpor
 - `laws[]`, `heat`, `clock`, `conditions` (player + top-level)
 - `threads[]`, `starting_plot`, `randomness`, `random_log[]`
 
-**Work:**
-- Parse/merge still uses `stateMerge`, but output is typed + normalized
-- Terminal holds `bible: WorldBible` alongside history
-- `getLastCanonicalState` becomes `getBible(history) | session.bible`
+**Shipped:**
+- Parse/merge still uses `stateMerge`; commit path normalizes to `WorldBible`
+- Terminal holds `bibleRef` alongside history (re-derived from history on restore)
+- `getBible(history, sessionBible)` prefers session bible
 
-**Tests:** round-trip from sample STATE fixtures; bootstrap/hydration fixtures
+**Tests:** `scripts/test-world-bible.ts`
 
-### 1.2 Patch validation before commit — M
+### 1.2 Patch validation before commit — M ✅
 
 **New:** `lib/stateValidate.ts`
 
@@ -132,8 +132,8 @@ Highest leverage. Demote raw chat JSON from “source of truth” to “transpor
 | Named person in SCENE without `characters[]` id | warn → inject reminder next turn |
 | `world_type === grounded` ⇒ no magic abilities invented mid-run | reject ability add |
 
-**Integration:** `resolveCanonicalAssistantContent` validates after merge; on hard
-fail keep previous bible and attach a server note for next turn.
+**Shipped:** `commitAssistantState` validates after merge; on hard fail keeps
+previous bible STATE in `[WORLD]`.
 
 **Tests:** `scripts/test-state-validate.ts` — one case per rule
 
@@ -152,11 +152,11 @@ parse failure = amnesia; localStorage grows.
 
 **Tests:** save/load with bible; payload annotation shows projection; truncated WORLD cannot wipe player/cast
 
-### 1.4 Hydration contract gate — M
+### 1.4 Hydration contract gate — M ✅
 
 **Problem:** Phase B can under-deliver laws/NPCs; world marked ready anyway.
 
-**Work:** after `mergeHydrationIntoOpening`, assert contract:
+**Shipped:** `lib/hydrationContract.ts` after hydrate merge:
 - `law_count` from WorldSpec (or 2–4 default) satisfied
 - ≥1 location with ≥1 exit
 - player sheet complete (body + stats)
@@ -164,11 +164,9 @@ parse failure = amnesia; localStorage grows.
 - `starting_plot` object present
 - `world_type` matches dial decode
 
-On fail: one automatic hydrate retry; then surface soft warning in debug + still play with bootstrap defaults.
+On fail: one automatic hydrate retry; then soft system warning + play with patched defaults.
 
-**Files:** `lib/stateMerge.ts` / new `lib/hydrationContract.ts`, Terminal hydration
-
-**Tests:** `scripts/test-opening-hydrate.ts` extended with contract pass/fail fixtures
+**Tests:** `scripts/test-hydration-contract.ts`
 
 ---
 
@@ -343,10 +341,12 @@ Update `content/seed-dial-regression.md` + `casino-regression.md`:
 - chill exploration (no railroad)
 - shared seed load across engine bump (expect refuse)
 
-### 6.3 Debug panel: bible diff
+### 6.3 Debug panel: bible diff — partial ✅
 
-Show last committed bible vs model-proposed delta + validation errors.
-Makes prompt iteration vastly faster.
+**Shipped:** live WorldBible overview/JSON, last commit validation, hydration
+contract in debug panel + `/bible` `/validate` `/hydrate`.
+
+**Still open:** side-by-side last committed bible vs model-proposed delta diff.
 
 ### 6.4 Rate limit / multi-instance
 

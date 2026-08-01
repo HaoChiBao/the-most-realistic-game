@@ -5,6 +5,15 @@
 
 import { resolveActionConsequence } from "@/lib/actionConsequence";
 import {
+  bibleJson,
+  formatBibleGuide,
+  formatBibleOverview,
+  formatCommitAudit,
+  formatHydrationAudit,
+  type BibleCommitAudit,
+  type HydrationAudit,
+} from "@/lib/bibleDebug";
+import {
   extractCharactersFromState,
   formatCharactersOverview,
   formatVitalsOverview,
@@ -33,6 +42,11 @@ import {
 } from "@/lib/stateParse";
 import { formatSyncTimingTable, type SyncTimingRecord } from "@/lib/syncTiming";
 import { ENGINE_VERSION } from "@/lib/systemPrompt";
+import {
+  getBible,
+  type WorldBible,
+  worldBibleFromHistory,
+} from "@/lib/worldBible";
 
 export type DevCommandTurn = { role: "user" | "assistant"; content: string };
 
@@ -45,6 +59,9 @@ export type DevCommandContext = {
   ended: boolean;
   softEnded: boolean;
   endLabel: string | null;
+  bible?: WorldBible | null;
+  lastCommitAudit?: BibleCommitAudit | null;
+  lastHydrationAudit?: HydrationAudit | null;
 };
 
 export type DevCommandResult = {
@@ -74,12 +91,20 @@ function pretty(value: unknown, maxChars = 3500): string {
 }
 
 function lastState(ctx: DevCommandContext): Record<string, unknown> | null {
+  const bible = getBible(ctx.history, ctx.bible ?? null);
+  if (bible) {
+    return bibleJson(bible) as Record<string, unknown>;
+  }
   for (let i = ctx.history.length - 1; i >= 0; i--) {
     if (ctx.history[i].role !== "assistant") continue;
     const s = extractStateJson(ctx.history[i].content);
     if (s && typeof s === "object") return s as Record<string, unknown>;
   }
   return null;
+}
+
+function liveBible(ctx: DevCommandContext): WorldBible | null {
+  return getBible(ctx.history, ctx.bible ?? null) ?? worldBibleFromHistory(ctx.history);
 }
 
 function lastAssistantRaw(ctx: DevCommandContext): string | null {
@@ -217,7 +242,77 @@ const COMMANDS: CmdDef[] = [
       const block = needWorld(ctx);
       if (block) return block;
       return {
-        lines: [...header("STATE JSON"), pretty(lastState(ctx))],
+        lines: [
+          ...header("STATE JSON"),
+          "(from live WorldBible when available)",
+          pretty(lastState(ctx)),
+        ],
+      };
+    },
+  },
+  {
+    name: "bible",
+    aliases: ["wb", "canon"],
+    category: "State",
+    blurb: "Live WorldBible overview — /bible json for full dump",
+    needsWorld: true,
+    run: (args, ctx) => {
+      const block = needWorld(ctx);
+      if (block) return block;
+      const bible = liveBible(ctx);
+      const mode = args.trim().toLowerCase();
+      if (mode === "json" || mode === "full" || mode === "raw") {
+        return {
+          lines: [
+            ...header("WORLDBIBLE JSON"),
+            pretty(bibleJson(bible)),
+          ],
+        };
+      }
+      if (mode === "guide" || mode === "help") {
+        return { lines: [...header("WORLDBIBLE GUIDE"), formatBibleGuide()] };
+      }
+      return {
+        lines: [
+          ...header("WORLDBIBLE"),
+          formatBibleOverview(bible),
+          "",
+          "tips: /bible json  ·  /validate  ·  /hydrate  ·  /debug",
+        ],
+      };
+    },
+  },
+  {
+    name: "validate",
+    aliases: ["audit", "commit"],
+    category: "State",
+    blurb: "Last STATE commit validation (rejects / repairs)",
+    needsWorld: true,
+    run: (_args, ctx) => {
+      const block = needWorld(ctx);
+      if (block) return block;
+      return {
+        lines: [
+          ...header("COMMIT VALIDATION"),
+          formatCommitAudit(ctx.lastCommitAudit ?? null),
+        ],
+      };
+    },
+  },
+  {
+    name: "hydrate",
+    aliases: ["hydration", "contract"],
+    category: "State",
+    blurb: "Hydration contract result (Phase B gate)",
+    needsWorld: true,
+    run: (_args, ctx) => {
+      const block = needWorld(ctx);
+      if (block) return block;
+      return {
+        lines: [
+          ...header("HYDRATION CONTRACT"),
+          formatHydrationAudit(ctx.lastHydrationAudit ?? null),
+        ],
       };
     },
   },
@@ -737,7 +832,7 @@ const COMMANDS: CmdDef[] = [
   },
   {
     name: "opening",
-    aliases: ["gen", "bible"],
+    aliases: ["gen", "turn1"],
     category: "Story",
     blurb: "Turn-1 STATE story bundle (world at generation)",
     needsWorld: true,
@@ -754,6 +849,8 @@ const COMMANDS: CmdDef[] = [
             label: "TURN 1",
             turnHint: " — seeded at world creation",
           }),
+          "",
+          "(live WorldBible: /bible)",
         ],
       };
     },
@@ -823,7 +920,7 @@ export function formatCommandList(): string[] {
     }
     lines.push("");
   }
-  lines.push("Examples: /npcs guard  /story  /next  /opening");
+  lines.push("Examples: /bible  /validate  /hydrate  /npcs guard  /story");
   return lines;
 }
 

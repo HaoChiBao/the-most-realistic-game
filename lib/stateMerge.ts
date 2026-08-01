@@ -1,5 +1,11 @@
 import type { ClientTurn } from "@/lib/gameMessages";
-import { extractStateJson } from "@/lib/stateParse";
+import { extractStateJson, extractSceneBlock } from "@/lib/stateParse";
+import { validateStateTransition, type ValidateIssue } from "@/lib/stateValidate";
+import {
+  normalizeWorldBible,
+  worldBibleToRecord,
+  type WorldBible,
+} from "@/lib/worldBible";
 
 const KEYED_ARRAY_KEYS = [
   "characters",
@@ -388,26 +394,89 @@ export function getLastCanonicalState(
   return null;
 }
 
+export type CommitAssistantResult = {
+  content: string;
+  bible: WorldBible;
+  issues: ValidateIssue[];
+  rejected: boolean;
+};
+
+export type CommitOptions = {
+  /** Player turn → enforce clock advance + move graph. Opening/hydrate: false. */
+  isPlayerTurn?: boolean;
+  forcedMove?: boolean;
+  /** Prefer this bible as previous instead of parsing history. */
+  previousBible?: WorldBible | null;
+};
+
+/**
+ * Merge streamed delta STATE into canonical form, validate, rewrite [WORLD].
+ * On hard validation failure keeps the previous bible STATE.
+ */
+export function commitAssistantState(
+  history: ClientTurn[],
+  rawContent: string,
+  opts: CommitOptions = {}
+): CommitAssistantResult {
+  const delta = extractStateJson(rawContent);
+  const scene = extractSceneBlock(rawContent);
+  const prevRecord =
+    (opts.previousBible
+      ? worldBibleToRecord(opts.previousBible)
+      : getLastCanonicalState(history)) ?? null;
+
+  if (!delta || typeof delta !== "object") {
+    const fallback = prevRecord ?? minimalBootstrapState();
+    const bible = normalizeWorldBible(fallback);
+    return {
+      content: rawContent,
+      bible,
+      issues: [],
+      rejected: false,
+    };
+  }
+
+  // Never accept a sparse delta as the whole world when prior STATE is missing —
+  // that drops bootstrap `player` the same way a bad hydration merge does.
+  const base = prevRecord ?? minimalBootstrapState();
+  const merged = ensureBootstrapFields(
+    mergeDeltaState(base, delta as Record<string, unknown>)
+  );
+
+  const validated = validateStateTransition(prevRecord, merged, {
+    isPlayerTurn: opts.isPlayerTurn === true,
+    forcedMove: opts.forcedMove === true,
+    scene,
+  });
+
+  const commitState = validated.rejected
+    ? ensureBootstrapFields(prevRecord ?? minimalBootstrapState())
+    : ensureBootstrapFields(validated.state);
+
+  const bible = normalizeWorldBible(commitState);
+  const content = rewriteWorldState(
+    rawContent,
+    worldBibleToRecord(bible)
+  );
+
+  return {
+    content,
+    bible,
+    issues: validated.issues,
+    rejected: validated.rejected,
+  };
+}
+
 /**
  * Merge streamed delta STATE into canonical form and rewrite [WORLD] before
  * storing in session history.
  */
 export function resolveCanonicalAssistantContent(
   history: ClientTurn[],
-  rawContent: string
+  rawContent: string,
+  opts: CommitOptions = {}
 ): string {
-  const delta = extractStateJson(rawContent);
-  if (!delta || typeof delta !== "object") return rawContent;
-
-  const prev = getLastCanonicalState(history);
-  // Never accept a sparse delta as the whole world when prior STATE is missing —
-  // that drops bootstrap `player` the same way a bad hydration merge does.
-  const base = prev ?? minimalBootstrapState();
-  const merged = ensureBootstrapFields(
-    mergeDeltaState(base, delta as Record<string, unknown>)
-  );
-
-  return rewriteWorldState(rawContent, merged);
+  return commitAssistantState(history, rawContent, opts).content;
 }
 
 /**
@@ -419,17 +488,54 @@ export function mergeHydrationIntoOpening(
   openingContent: string,
   hydrationRaw: string
 ): string {
-  const delta = extractStateJson(hydrationRaw);
-  if (!delta || typeof delta !== "object") return openingContent;
+  return mergeHydrationIntoOpeningDetailed(openingContent, hydrationRaw)
+    .content;
+}
 
+export type HydrationMergeResult = {
+  content: string;
+  bible: WorldBible;
+  state: Record<string, unknown>;
+  issues: ValidateIssue[];
+};
+
+export function mergeHydrationIntoOpeningDetailed(
+  openingContent: string,
+  hydrationRaw: string
+): HydrationMergeResult {
+  const delta = extractStateJson(hydrationRaw);
   const prev = extractStateJson(openingContent);
   const base =
     prev && typeof prev === "object"
       ? (prev as Record<string, unknown>)
       : minimalBootstrapState();
+
+  if (!delta || typeof delta !== "object") {
+    const ensured = ensureBootstrapFields(base);
+    const bible = normalizeWorldBible(ensured);
+    return {
+      content: openingContent,
+      bible,
+      state: worldBibleToRecord(bible),
+      issues: [],
+    };
+  }
+
   const merged = ensureBootstrapFields(
     mergeDeltaState(base, delta as Record<string, unknown>)
   );
-
-  return rewriteWorldState(openingContent, merged);
+  // Hydration is not a player turn — skip clock/move hard rejects; still repair.
+  const validated = validateStateTransition(base, merged, {
+    isPlayerTurn: false,
+    forcedMove: true,
+  });
+  const commitState = ensureBootstrapFields(validated.state);
+  const bible = normalizeWorldBible(commitState);
+  const record = worldBibleToRecord(bible);
+  return {
+    content: rewriteWorldState(openingContent, record),
+    bible,
+    state: record,
+    issues: validated.issues,
+  };
 }

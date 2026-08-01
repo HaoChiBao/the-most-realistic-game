@@ -26,6 +26,16 @@ import {
   formatRandomnessGuide,
   formatRollOverview,
 } from "@/lib/randomness";
+import {
+  bibleJson,
+  formatBibleGuide,
+  formatBibleOverview,
+  formatCommitAudit,
+  formatHydrationAudit,
+  type BibleCommitAudit,
+  type HydrationAudit,
+} from "@/lib/bibleDebug";
+import type { WorldBible } from "@/lib/worldBible";
 import { resolveActionConsequence } from "@/lib/actionConsequence";
 import { resolveRollForHistory } from "@/lib/rollContext";
 import {
@@ -64,6 +74,10 @@ export type SessionDebugMeta = {
   sceneReady?: boolean;
   worldHydrating?: boolean;
   syncTimings?: SyncTimingRecord[];
+  /** Live runtime bible (preferred over history parse). */
+  bible?: WorldBible | null;
+  lastCommitAudit?: BibleCommitAudit | null;
+  lastHydrationAudit?: HydrationAudit | null;
 };
 
 type Turn = { role: "user" | "assistant"; content: string };
@@ -217,6 +231,41 @@ export function buildDebugSections(opts: {
     title: seedDialTable ? "11 · Randomness — hybrid rolls" : "09 · Randomness — hybrid rolls",
     kind: "text",
     body: formatRandomnessGuide(),
+  });
+
+  sections.push({
+    id: "bible-guide",
+    title: seedDialTable ? "12 · WorldBible — ownership & audit" : "10 · WorldBible — ownership & audit",
+    kind: "text",
+    body: formatBibleGuide(),
+  });
+
+  sections.push({
+    id: "bible-overview",
+    title: seedDialTable ? "13 · WorldBible (live)" : "11 · WorldBible (live)",
+    kind: "text",
+    body: formatBibleOverview(meta.bible ?? null),
+  });
+
+  sections.push({
+    id: "bible-json",
+    title: seedDialTable ? "14 · WorldBible JSON" : "12 · WorldBible JSON",
+    kind: "json",
+    body: pretty(bibleJson(meta.bible ?? null) ?? "(null — no bible yet)"),
+  });
+
+  sections.push({
+    id: "bible-validate",
+    title: seedDialTable ? "15 · Last commit validation" : "13 · Last commit validation",
+    kind: "text",
+    body: formatCommitAudit(meta.lastCommitAudit ?? null),
+  });
+
+  sections.push({
+    id: "bible-hydrate",
+    title: seedDialTable ? "16 · Hydration contract" : "14 · Hydration contract",
+    kind: "text",
+    body: formatHydrationAudit(meta.lastHydrationAudit ?? null),
   });
 
   const pendingRoll = resolveRollForHistory(history, seedCode);
