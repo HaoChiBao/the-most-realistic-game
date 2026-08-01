@@ -6,7 +6,7 @@
     "date": "2026-08-01",
     "significance": 85,
     "title": "Strangers stay strangers until you meet them",
-    "summary": "Looking around no longer names people or dumps their job and life story. You see a woman in a grey jumpsuit — not “Jane Doe, the building superintendent.” Approach, talk, and ask before the world fills in the rest.",
+    "summary": "Looking around no longer names people or dumps their job and life story. You see a woman in a grey jumpsuit — not “Jane Doe, the building superintendent.” Approach, talk, and ask before the world fills in the rest. When names do exist in the world bible, they come from a seeded generator — slightly uncommon contemporary names, never stock placeholders.",
     "tags": ["engine", "characters", "pov", "abstraction"],
     "changes": [
       "Glance / look around: physical descriptions only — no proper names, no job titles, no biography",
@@ -16,6 +16,8 @@
       "Typical order: look → approach & talk → ask name → ask job → personal questions",
       "Same idea for closed drawers, unread papers, and other people’s pockets",
       "Engine tracks what you know per person (seen / talked / name / role / backstory)",
+      "Seeded name pool at hydration — Renata Voss energy, not Jane Doe; stock names get rewritten",
+      "Spare name list injected when new people might enter mid-run",
       "Engine version bump to v6.1 — start a new session; old shared worlds need a re-share"
     ]
   },

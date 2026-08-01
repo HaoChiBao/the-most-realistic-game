@@ -21,6 +21,7 @@ import {
   rewriteWorldState,
 } from "@/lib/stateMerge";
 import { assertHydrationContract } from "@/lib/hydrationContract";
+import { repairCharacterNames } from "@/lib/nameGen";
 import {
   normalizeWorldBible,
   worldBibleFromHistory,
@@ -451,20 +452,22 @@ export default function Terminal({ seedCode }: { seedCode?: string }) {
         let content = merge.content;
         let bible = merge.bible;
         let softPatched = false;
+        let workingState = contract.ok ? merge.state : contract.state;
         if (!contract.ok) {
-          // Soft warning + play with bootstrap-patched defaults.
-          const patched = rewriteWorldState(
-            merge.content,
-            contract.state
-          );
-          content = patched;
-          bible = normalizeWorldBible(contract.state);
           softPatched = true;
           addEntry(
             "system",
             `hydration soft — ${contract.failures.slice(0, 2).join("; ")}`
           );
         }
+
+        // Replace Jane Doe / stock placeholders with seeded session names.
+        const nameRepair = repairCharacterNames(workingState, seedRef.current);
+        if (nameRepair.replaced.length > 0) {
+          workingState = nameRepair.state;
+        }
+        content = rewriteWorldState(merge.content, workingState);
+        bible = normalizeWorldBible(workingState);
 
         historyRef.current[0] = { role: "assistant", content };
         openingWorldRef.current = { ...historyRef.current[0] };

@@ -10,6 +10,10 @@ import {
   buildKnowledgePromptBlock,
   extractLatestStateFromHistory,
 } from "@/lib/playerKnowledge";
+import {
+  buildNamePoolPromptBlock,
+  buildSpareNamesPromptBlock,
+} from "@/lib/nameGen";
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 export type ClientTurn = { role: "user" | "assistant"; content: string };
@@ -45,9 +49,10 @@ export function buildGameMessages(
       throw new Error("hydrate phase requires an assistant opening turn");
     }
     messages.push({ role: "assistant", content: opening.content.slice(0, 8000) });
+    const namePool = buildNamePoolPromptBlock(seedCode, 6);
     messages.push({
       role: "user",
-      content: OPENING_HYDRATION_INSTRUCTION,
+      content: `${OPENING_HYDRATION_INSTRUCTION}\n\n${namePool}`,
     });
     return messages;
   }
@@ -86,6 +91,8 @@ export function buildGameMessages(
         const priorState = extractLatestStateFromHistory(trimmed);
         const knowledgeBlock = buildKnowledgePromptBlock(priorState);
         if (knowledgeBlock) injections.push(knowledgeBlock);
+        const spareNames = buildSpareNamesPromptBlock(seedCode, priorState, 3);
+        if (spareNames) injections.push(spareNames);
       }
       if (injections.length > 0) {
         content = `${content}\n\n${injections.join("\n\n")}`;
