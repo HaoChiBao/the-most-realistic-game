@@ -3,6 +3,8 @@
  * Runtime rejects / repairs illegal STATE transitions.
  */
 
+import { auditSceneKnowledge } from "@/lib/playerKnowledge";
+
 export type ValidateSeverity = "reject" | "repair" | "warn";
 
 export type ValidateIssue = {
@@ -323,6 +325,16 @@ export function validateStateTransition(
         code: "scene_name_unregistered",
         severity: "warn",
         message: `SCENE names without characters[] sheet: ${missing.join(", ")}`,
+      });
+    }
+
+    // Premature name/role/backstory before player_knowledge earned — warn
+    const chars = Array.isArray(state.characters) ? state.characters : [];
+    for (const leak of auditSceneKnowledge(opts.scene, chars)) {
+      issues.push({
+        code: `knowledge_${leak.code}`,
+        severity: "warn",
+        message: `${leak.npcId}: ${leak.detail}`,
       });
     }
   }

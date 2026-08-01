@@ -34,6 +34,14 @@ export type CharacterRelationship = {
   log?: RelationshipLogEntry[];
 };
 
+export type CharacterPlayerKnowledge = {
+  seen?: boolean;
+  name_known?: boolean;
+  role_known?: boolean;
+  talked?: boolean;
+  backstory_known?: boolean;
+};
+
 export type CharacterSheet = {
   id: string;
   name?: string;
@@ -53,6 +61,7 @@ export type CharacterSheet = {
   relationship_to_player?: string;
   relationship?: CharacterRelationship;
   memory?: CharacterMemory[];
+  player_knowledge?: CharacterPlayerKnowledge;
   introduced_turn?: number;
   last_seen_turn?: number;
   last_interaction_turn?: number;
@@ -98,6 +107,11 @@ export const CHARACTER_STATE_KEYS = [
     key: "relationship",
     role: "Short-term vibe + long-term bond/tags/log with the player",
     prompt: "RELATIONSHIP TRACKING in system prompt",
+  },
+  {
+    key: "player_knowledge",
+    role: "What SCENE may reveal — seen / name / role / talked / backstory",
+    prompt: "PLAYER KNOWLEDGE progressive disclosure",
   },
   {
     key: "disposition",
@@ -216,6 +230,41 @@ function asSheet(raw: unknown): CharacterSheet | null {
         ? String(o.relationship_to_player)
         : undefined,
     relationship: parseRelationship(o.relationship),
+    player_knowledge:
+      o.player_knowledge && typeof o.player_knowledge === "object"
+        ? {
+            seen:
+              typeof (o.player_knowledge as Record<string, unknown>).seen ===
+              "boolean"
+                ? ((o.player_knowledge as Record<string, unknown>)
+                    .seen as boolean)
+                : undefined,
+            name_known:
+              typeof (o.player_knowledge as Record<string, unknown>)
+                .name_known === "boolean"
+                ? ((o.player_knowledge as Record<string, unknown>)
+                    .name_known as boolean)
+                : undefined,
+            role_known:
+              typeof (o.player_knowledge as Record<string, unknown>)
+                .role_known === "boolean"
+                ? ((o.player_knowledge as Record<string, unknown>)
+                    .role_known as boolean)
+                : undefined,
+            talked:
+              typeof (o.player_knowledge as Record<string, unknown>).talked ===
+              "boolean"
+                ? ((o.player_knowledge as Record<string, unknown>)
+                    .talked as boolean)
+                : undefined,
+            backstory_known:
+              typeof (o.player_knowledge as Record<string, unknown>)
+                .backstory_known === "boolean"
+                ? ((o.player_knowledge as Record<string, unknown>)
+                    .backstory_known as boolean)
+                : undefined,
+          }
+        : undefined,
     memory: Array.isArray(o.memory)
       ? o.memory
           .filter((m): m is Record<string, unknown> => !!m && typeof m === "object")
@@ -490,6 +539,17 @@ function summarizeCharacter(c: CharacterSheet, i: number): string {
     c.alive === false ? "DEAD" : null,
     c.conscious === false ? "UNCONSCIOUS" : null,
     c.introduced_turn != null ? `introduced turn ${c.introduced_turn}` : null,
+    c.player_knowledge
+      ? `knows: ${[
+          c.player_knowledge.seen ? "seen" : null,
+          c.player_knowledge.name_known ? "name" : null,
+          c.player_knowledge.role_known ? "role" : null,
+          c.player_knowledge.talked ? "talked" : null,
+          c.player_knowledge.backstory_known ? "backstory" : null,
+        ]
+          .filter(Boolean)
+          .join(",") || "none"}`
+      : null,
     c.memory?.length ? `memory: ${c.memory.length} entries` : null,
   ].filter(Boolean);
   if (parts.length === 1) return `  [${i}] ${c.id}`;
@@ -622,7 +682,7 @@ export function formatCharacterStorageGuide(): string {
     "",
     "PLAYER VISIBILITY",
     "  • [SCENE] shows only what the character perceives — not full sheets",
-    "  • Stats and hidden motives stay in STATE until earned by action",
+    "  • Stats, names, roles, and motives stay in STATE until player_knowledge earns them",
   ].join("\n");
 }
 

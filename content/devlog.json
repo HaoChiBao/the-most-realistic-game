@@ -1,5 +1,25 @@
 [
   {
+    "id": "2026-08-01-player-knowledge",
+    "version": "0.8.1",
+    "engine": "v6.1",
+    "date": "2026-08-01",
+    "significance": 85,
+    "title": "Progressive NPC knowledge — names earned, not dumped",
+    "summary": "Looking around no longer names strangers or dumps their job and biography. The narrator uses physical stand-ins until you approach, talk, and ask — tracked in characters[].player_knowledge and enforced with a per-turn server injection plus SCENE validation warnings.",
+    "tags": ["engine", "characters", "pov", "abstraction"],
+    "changes": [
+      "New characters[].player_knowledge { seen, name_known, role_known, talked, backstory_known }",
+      "SCENE may not use proper names or roles until those flags are earned",
+      "whois / who-is answers only from earned knowledge — no sheet dumps",
+      "Per-turn [PLAYER KNOWLEDGE] injection lists present NPCs and bans",
+      "STATE validation warns on premature name/role/backstory in SCENE",
+      "Glance descriptions stay physical; approach + ask name before naming",
+      "Same spirit for closed containers, unread text, others' inventory",
+      "Engine version bump to v6.1 — start a new session / re-share worlds"
+    ]
+  },
+  {
     "id": "2026-07-31-world-bible",
     "version": "0.8.0",
     "engine": "v6.0",

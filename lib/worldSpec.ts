@@ -218,7 +218,7 @@ function buildConstraints(spec: {
   }
   c.push("Digits are NOT a plot genre. starting_plot is a seed tension the player may ignore — not a railroad.");
   c.push("Chill exploration is first-class. Dials set baseline society/physics, not mandatory crisis every turn.");
-  c.push("Character POV: opening is place category only; SCENE after that reveals only what actions earn.");
+  c.push("Character POV: opening is place category only; SCENE after that reveals only what actions earn. NPC names/roles need player_knowledge flags.");
   return c;
 }
 

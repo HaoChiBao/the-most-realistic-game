@@ -14,6 +14,7 @@ Manual checklist for engine **v5.0**. Digits bias generation; stored bible remai
 2. **laws[] seeded** — Debug STATE shows laws matching rule_density / law_count from WorldSpec.
 3. **Unknown law can bite** — Breaking a local taboo costs heat/injury/NPC reaction before `known_to_player` is true; SCENE does not dump `true_rule`.
 4. **Discovery** — After evidence/test, a law flips `known_to_player`; SCENE may then reference surface honestly.
+5. **NPC abstraction** — First look uses physical stand-ins only (no proper name, no job dossier). Name after ask/intro; role after ask/badge; whois never dumps the full sheet.
 5. **Threads as probes** — At least one thread links toward a law (test/enforce/break) without railroading.
 6. **NPC rule carriers** — Named NPCs can care about / enforce laws; wrong person wrong time can be a law reaction.
 7. **Chill still works** — In a high law-pressure dial world, "go to a coffee shop" / loiter does not force a raid every turn.
