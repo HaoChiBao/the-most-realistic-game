@@ -99,7 +99,9 @@ export async function POST(req: NextRequest) {
       ? null
       : resolveRollForHistory(history, seedCode);
   const consequence =
-    openingPhase === "hydrate" ? null : resolveActionConsequence(history);
+    openingPhase === "hydrate"
+      ? null
+      : resolveActionConsequence(history, { seedCode });
   const messages = buildGameMessages(
     history,
     seedCode,

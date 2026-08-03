@@ -189,19 +189,23 @@ Keep seeded rolls as the surprise channel.
 
 **Tests:** config unit test for phase→temp mapping; manual feel check on opening variety
 
-### 2.2 Server combat outcome resolver — M
+### 2.2 Server combat outcome resolver — M ✅
 
 **New:** `lib/combatResolve.ts`
 
 **Input:** player action tags, player stats/body/conditions, target NPC sheet, heat, weapons  
 **Output enum:** e.g. `npc_restrains` | `npc_ko` | `npc_lethal` | `player_wounds_npc` | `player_flees` | `stalemate_costly`
 
-**Work:**
-- Replace open-ended “NPC MUST win” prose with structured outcome + required STATE patches
-- Model gets: outcome + allowed SCENE verbs + forbidden stalls
-- Wire into `resolveActionConsequence` / combat escalation
+**Shipped:**
+- Seeded weighted outcome pick (`seedCode` + turn + target + streak)
+- Replaces open-ended “NPC MUST win” combat escalation prose with structured
+  outcome + required STATE patches + allowed SCENE verbs + forbidden stalls
+- Flee mid-fight resolves to `player_flees` (escapes cuff/KO envelope)
+- Untrained vs professional authority biases restrain, with lethal on escalate
+- Wired through `resolveCombatEscalation` → `resolveActionConsequence` (seed passed from `/api/game`)
+- Engine bump to v6.2
 
-**Tests:** untrained vs professional authority → restrain/lethal distribution; flee action escapes envelope
+**Tests:** `scripts/test-combat-resolve.ts` — restrain/lethal distribution; flee escape; wire-through
 
 ### 2.3 Backup / heat timeline clock — M
 
@@ -380,7 +384,7 @@ Week-shaped slices (effort, not calendar):
 1) Phase 0.1 → 0.3 → 0.4     # bugfixes + share compat
 2) Phase 2.1                   # cheap consistency win
 3) Phase 1.1 → 1.2 → 1.4     # bible + validate + hydrate gate
-4) Phase 2.2 → 2.3             # combat/heat envelopes
+4) Phase 2.2 ✅ → 2.3          # combat outcome shipped; next: heat envelopes
 5) Phase 1.3                   # bible out of chat (hardest cut)
 6) Phase 3.*                   # continuity
 7) Phase 4.*                   # save v2 + copy

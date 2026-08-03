@@ -1,12 +1,21 @@
 import type { ClientTurn } from "@/lib/gameMessages";
 import { pickCombatNpc } from "@/lib/npcSelect";
 import { extractSceneBlock, extractStateJson } from "@/lib/stateParse";
+import {
+  resolveCombatOutcome,
+  tagCombatAction,
+  type CombatOutcome,
+  type CombatResolveResult,
+} from "@/lib/combatResolve";
 
 const ATTACK_RE =
   /\b(tackle|tackling|attack|attacking|punch|punches|punching|box|boxing|hit|hitting|kick|kicking|stab|shoot|fight|fighting|assault|throw|throwing|swing|bash|beat|slug|smash|strike|wrestle|grapple|choke|headbutt)\b/i;
 
 const TAUNT_RE =
   /\b(taunt|pussy|coward|bitch|weak|loser|scared|fight back|come at me|do something)\b/i;
+
+const FLEE_RE =
+  /\b(flee|run\s+away|run\s+for|sprint\s+away|bolt|escape|get\s+away|leg\s*it|retreat|back\s+off|break\s+away)\b/i;
 
 /** Passive fight narration the engine must not repeat. */
 const PASSIVE_SCENE_RE =
@@ -28,7 +37,13 @@ export type CombatEscalationResult = {
   target_npc_name: string | null;
   player_combat: number;
   npc_combat: number;
+  outcome: CombatOutcome | null;
+  resolve: CombatResolveResult | null;
   prompt_block: string;
+};
+
+export type CombatEscalationOptions = {
+  seedCode?: string | null;
 };
 
 function lastUserAction(history: ClientTurn[]): string {
@@ -59,12 +74,55 @@ function numStat(stats: unknown, key: string, fallback: number): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
 
+function clockTurn(state: Record<string, unknown> | null): number {
+  const clock =
+    state?.clock && typeof state.clock === "object"
+      ? (state.clock as Record<string, unknown>)
+      : null;
+  const turn = clock?.turn;
+  return typeof turn === "number" && Number.isFinite(turn) ? turn : 1;
+}
+
+function heatLevel(state: Record<string, unknown> | null): number {
+  const heat =
+    state?.heat && typeof state.heat === "object"
+      ? (state.heat as Record<string, unknown>)
+      : null;
+  const level = heat?.level;
+  return typeof level === "number" && Number.isFinite(level) ? level : 0;
+}
+
+const RESTRAINT_LABEL_RE = /\b(cuff|cuffed|handcuff|restrain|restrained|pin|pinned)\b/i;
+
+/** Local copy — avoid importing actionConsequence (circular). */
+function isPlayerRestrained(
+  state: Record<string, unknown> | null,
+  scene: string | null
+): boolean {
+  if (scene && /\b(cuff|cuffed|handcuff|restrain|restrained|pinned)\b/i.test(scene)) {
+    return true;
+  }
+  if (!state?.player || typeof state.player !== "object") return false;
+  const player = state.player as Record<string, unknown>;
+  const conds = Array.isArray(player.conditions) ? player.conditions : [];
+  for (const c of conds) {
+    if (!c || typeof c !== "object") continue;
+    const o = c as Record<string, unknown>;
+    if (o.progress === "resolved") continue;
+    if (o.kind === "restraint") return true;
+    if (RESTRAINT_LABEL_RE.test(String(o.label ?? ""))) return true;
+  }
+  return false;
+}
+
 /**
- * When the player is mid-assault, inject a hard mandate so trained NPCs
- * actually end the fight instead of stalling with passive blocking.
+ * When the player is mid-assault (or fleeing an active fight), inject a
+ * structured combat outcome envelope so trained NPCs end the fight instead
+ * of stalling with passive blocking.
  */
 export function resolveCombatEscalation(
-  history: ClientTurn[]
+  history: ClientTurn[],
+  opts: CombatEscalationOptions = {}
 ): CombatEscalationResult | null {
   const action = lastUserAction(history);
   if (!action) return null;
@@ -72,6 +130,8 @@ export function resolveCombatEscalation(
   const attackStreak = countRecentAttackTurns(history);
   const isAttack = ATTACK_RE.test(action);
   const isTaunt = TAUNT_RE.test(action);
+  const isFlee = FLEE_RE.test(action);
+  const tags = tagCombatAction(action);
 
   const lastRaw = lastAssistantRaw(history);
   const lastScene = lastRaw ? extractSceneBlock(lastRaw) : null;
@@ -91,7 +151,12 @@ export function resolveCombatEscalation(
   const isAuthority =
     !!npc && /officer|cop|police|deputy|sheriff|security|guard/i.test(npc.role);
 
+  // Flee mid-fight: still fire so the envelope becomes player_flees (not cuff).
+  const fleeFromFight =
+    isFlee && (attackStreak >= 1 || stateInCombat || passiveLastScene);
+
   const shouldFire =
+    fleeFromFight ||
     (isAuthority && attackStreak >= 2 && (isAttack || isTaunt)) ||
     (isAuthority && isAttack && attackStreak >= 1 && passiveLastScene) ||
     attackStreak >= 3 ||
@@ -113,24 +178,27 @@ export function resolveCombatEscalation(
   const npcName = npc?.name ?? "the guard";
   const npcId = npc?.id ?? "active_npc";
 
-  const mandatory =
-    npcCombat >= playerCombat + 15 ||
-    npcTraining === "professional" ||
-    npcTraining === "elite"
-      ? "NPC MUST win this turn: takedown + restraint on player, OR knockout (conscious false), OR drag to security_office/holding_cell. Update player_location if relocated."
-      : "NPC MUST counter decisively this turn — fight back, injure, flee, or call backup. No passive blocking.";
-
-  const prompt_block = `[COMBAT ESCALATION — server authoritative]
-Active assault in progress (${attackStreak} attack turns recent; last scene was ${
-    passiveLastScene ? "PASSIVE — forbidden to repeat" : "not yet resolved"
-  }).
-Target: ${npcName} (${npcId}) training=${npcTraining} combat=${npcCombat} vs player combat=${playerCombat}.
-${mandatory}
-SCENE rules this turn:
-- Narrate the NPC physically fighting back or ending the fight. BANNED phrases: "ready to respond", "hesitant", "blocks some", "prepares to push back", "raises hands defensively", "doesn't rush in".
-- ZERO plot nudges: no new smoke smells, murmurs, coffee, mysteries, or thread hooks unless the player explicitly walks away from the fight.
-- If the player asks a question mid-fight, the NPC answers briefly while fighting OR ignores it — do not pivot to environmental discovery.
-- Update characters[].combat_posture, memory[], player body/stats/conditions, heat in STATE.`;
+  const resolve = resolveCombatOutcome({
+    action,
+    tags,
+    playerCombat,
+    playerRestrained: isPlayerRestrained(s, lastScene),
+    npc: npc ?? {
+      id: npcId,
+      name: npcName,
+      role: "guard",
+      combat: npcCombat,
+      firearms: 40,
+      training: npcTraining,
+      archetype: "civilian",
+      authority_level: "none",
+    },
+    isAuthority,
+    heatLevel: heatLevel(s),
+    attackStreak,
+    seedCode: opts.seedCode,
+    turn: clockTurn(s),
+  });
 
   return {
     fired: true,
@@ -140,6 +208,8 @@ SCENE rules this turn:
     target_npc_name: npcName,
     player_combat: playerCombat,
     npc_combat: npcCombat,
-    prompt_block,
+    outcome: resolve.outcome,
+    resolve,
+    prompt_block: resolve.prompt_block,
   };
 }

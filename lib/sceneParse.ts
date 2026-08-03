@@ -134,6 +134,7 @@ export function parseScene(raw: string): ParsedScene {
 export function sanitizeSceneMeta(text: string): string {
   return text
     .replace(/\[\s*COMBAT\s+ESCALATION[\s\S]*?\]/gi, "")
+    .replace(/\[\s*COMBAT\s+OUTCOME[\s\S]*?\]/gi, "")
     .replace(/\[\s*AUTHORITY\s+RESPONSE[\s\S]*?\]/gi, "")
     .replace(/\[\s*LETHAL\s+CONSEQUENCE[\s\S]*?\]/gi, "")
     .replace(/\[\s*DETENTION\s+TIMER[\s\S]*?\]/gi, "")

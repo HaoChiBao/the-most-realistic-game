@@ -149,6 +149,14 @@ const cleaned = parseScene(
 );
 assert(!cleaned.scene.includes("COMBAT"), "strip combat leak");
 assert(!cleaned.scene.includes("continues"), "strip scene meta");
+
+const cleanedOutcome = parseScene(
+  `[SCENE]\nYou struggle.\n[COMBAT OUTCOME — server authoritative]\n[WORLD]\nSTATE\n{}`
+);
+assert(
+  !cleanedOutcome.scene.includes("COMBAT"),
+  "strip combat outcome header leak"
+);
 assert(sanitizeSceneMeta("[SCENE continues x]") === "", "sanitize meta only");
 
 console.log("actionConsequence tests passed");

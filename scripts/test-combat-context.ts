@@ -27,14 +27,21 @@ STATE
   { role: "user" as const, content: "keep throwing punches" },
 ];
 
-const combat = resolveCombatEscalation(history);
+const combat = resolveCombatEscalation(history, { seedCode: "1212121212" });
 assert(combat?.fired, "combat escalation should fire after passive loop");
 assert(combat!.attack_streak >= 2, "attack streak counted");
 assert(combat!.passive_last_scene, "detected passive scene");
-assert(combat!.prompt_block.includes("COMBAT ESCALATION"), "has block header");
+assert(combat!.outcome, "structured outcome present");
+assert(combat!.prompt_block.includes("COMBAT OUTCOME"), "has outcome header");
 assert(combat!.prompt_block.includes("Vince"), "names target npc");
-assert(combat!.prompt_block.includes("BANNED"), "lists banned passive phrases");
-assert(combat!.prompt_block.includes("ZERO plot nudges"), "blocks plot nudges");
+assert(
+  combat!.prompt_block.includes("Forbidden stalls"),
+  "lists banned passive phrases"
+);
+assert(
+  combat!.prompt_block.includes("No plot nudges"),
+  "blocks plot nudges"
+);
 
 const chill = resolveCombatEscalation([
   { role: "user", content: "look around" },

@@ -731,7 +731,9 @@ const COMMANDS: CmdDef[] = [
     run: (_args, ctx) => {
       const block = needWorld(ctx);
       if (block) return block;
-      const consequence = resolveActionConsequence(gameHistory(ctx));
+      const consequence = resolveActionConsequence(gameHistory(ctx), {
+        seedCode: ctx.seedCode,
+      });
       const roll = resolveRollForHistory(gameHistory(ctx), ctx.seedCode);
       const lines = [...header("NEXT TURN (server injections)")];
       if (consequence?.fired) {
