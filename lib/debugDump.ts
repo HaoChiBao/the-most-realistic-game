@@ -269,7 +269,7 @@ export function buildDebugSections(opts: {
   });
 
   const pendingRoll = resolveRollForHistory(history, seedCode);
-  const pendingConsequence = resolveActionConsequence(history);
+  const pendingConsequence = resolveActionConsequence(history, { seedCode });
   sections.push({
     id: "random-roll",
     title: seedDialTable ? "10 · Random roll (next turn)" : "08 · Random roll (next turn)",

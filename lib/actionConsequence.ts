@@ -174,12 +174,17 @@ BANNED: "time passes", "uneventful", "nothing happens", random smells/footprints
   };
 }
 
+export type ActionConsequenceOptions = {
+  seedCode?: string | null;
+};
+
 /**
  * Highest-priority server injection for rash violence, authority contact,
  * combat loops, and detention stasis.
  */
 export function resolveActionConsequence(
-  history: ClientTurn[]
+  history: ClientTurn[],
+  opts: ActionConsequenceOptions = {}
 ): ActionConsequenceResult | null {
   const action = lastUserAction(history);
   if (!action) return null;
@@ -216,7 +221,7 @@ export function resolveActionConsequence(
     if (authority) return authority;
   }
 
-  const combat = resolveCombatEscalation(history);
+  const combat = resolveCombatEscalation(history, { seedCode: opts.seedCode });
   if (combat?.fired) {
     return {
       kind: "combat",
@@ -225,11 +230,10 @@ export function resolveActionConsequence(
         attack_streak: combat.attack_streak,
         passive_last_scene: combat.passive_last_scene,
         target: combat.target_npc_id,
+        outcome: combat.outcome,
+        combat_roll: combat.resolve?.roll,
       },
-      prompt_block: combat.prompt_block.replace(
-        "NPC MUST win this turn:",
-        "NPC MUST win this turn (NO extended stunlock — if player already cuffed, any new assault = lethal force or hard END):"
-      ),
+      prompt_block: combat.prompt_block,
     };
   }
 

@@ -1,5 +1,23 @@
 [
   {
+    "id": "2026-08-03-combat-outcome",
+    "version": "0.8.2",
+    "engine": "v6.2",
+    "date": "2026-08-03",
+    "significance": 80,
+    "title": "Fights end with a decided outcome",
+    "summary": "When a fight escalates, the server now picks a concrete result — restrain, knockout, lethal force, you wound them, you flee, or a costly stalemate — and the scene has to narrate that result. No more endless “ready to respond” loops. Running away mid-fight actually breaks contact instead of getting you cuffed by default.",
+    "tags": ["engine", "combat", "fairness"],
+    "changes": [
+      "Server combat outcome envelope on escalated fights (seeded, reproducible)",
+      "Outcomes: npc restrains / KO / lethal, player wounds NPC, player flees, costly stalemate",
+      "Model gets allowed verbs + forbidden stall phrases + required STATE patches",
+      "Flee mid-fight resolves to escape, not automatic cuff",
+      "Untrained assault on professional authority biases toward restraint (lethal on escalate)",
+      "Engine version bump to v6.2 — start a new session; old shared worlds need a re-share"
+    ]
+  },
+  {
     "id": "2026-08-01-player-knowledge",
     "version": "0.8.1",
     "engine": "v6.1",
